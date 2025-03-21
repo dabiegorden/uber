@@ -14,5 +14,5 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
-, "app/index.jsx", "app/profile.jsx"  ]
+, "app/index.jsx", "app/profile.jsx", "app/(auth)/login.jsx", "app/(auth)/register.jsx", "constants/index.js", "app/(auth)/welcome.jsx"  ]
 }

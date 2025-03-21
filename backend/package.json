@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js"
   },
   "keywords": [],
   "author": "",
@@ -18,5 +18,8 @@
     "express-session": "^1.18.1",
     "mysql2": "^3.13.0",
     "nodemon": "^3.1.9"
+  },
+  "dependencies": {
+    "express-mysql-session": "^3.0.3"
   }
 }
