@@ -11,12 +11,46 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
+import { router, useLocalSearchParams } from 'expo-router';
 
-const MapScreen = ({ user, onLogout }) => {
+// Set the base URL for all fetch requests
+const BASE_URL = 'http://192.168.137.195:8080';
+
+const MapScreen = () => {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  
+  // Get user profile info
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const response = await fetch(`${BASE_URL}/api/auth/profile`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+          setUser(data.user);
+        } else {
+          // If not authenticated, redirect to login
+          Alert.alert('Session Expired', 'Please login again');
+          router.replace('/login');
+        }
+      } catch (error) {
+        console.error('Error fetching user profile:', error);
+        Alert.alert('Error', 'Unable to fetch user profile');
+      }
+    };
+    
+    fetchUserProfile();
+  }, []);
 
   // Get user's location
   useEffect(() => {
@@ -90,12 +124,41 @@ const MapScreen = ({ user, onLogout }) => {
   // Function to update location in backend
   const updateLocationInBackend = async (latitude, longitude) => {
     try {
-      await axios.post('/update-location', {
-        latitude,
-        longitude
+      await fetch(`${BASE_URL}/api/update-location`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          latitude,
+          longitude
+        }),
+        credentials: 'include'
       });
     } catch (error) {
       console.error('Failed to update location in backend:', error);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include'
+      });
+      
+      // Clear any stored data
+      // await AsyncStorage.removeItem('userToken');
+      
+      // Navigate to login
+      router.replace('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to logout');
     }
   };
 
@@ -115,11 +178,13 @@ const MapScreen = ({ user, onLogout }) => {
         <View className="flex-row justify-between items-center p-4 bg-white border-b border-gray-200">
           <View>
             <Text className="text-xl font-bold">Boat App</Text>
-            <Text className="text-gray-500">Welcome, {user.username}</Text>
+            <Text className="text-gray-500">
+              Welcome, {user ? user.username || user.email : 'User'}
+            </Text>
           </View>
           <TouchableOpacity 
             className="p-2" 
-            onPress={onLogout}
+            onPress={handleLogout}
           >
             <Ionicons name="log-out-outline" size={24} color="#3b82f6" />
           </TouchableOpacity>

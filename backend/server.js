@@ -1,21 +1,45 @@
 const express = require('express');
-const app = express();
 const cors = require('cors');
-const bodyParser = require('body-parser');
+const helmet = require('helmet');
+const db = require('./config/database');
+const sessionConfig = require('./config/session');
+const authRoutes = require('./routes/auth');
 const dotenv = require('dotenv');
+const bcrypt = require('bcrypt');
 dotenv.config();
 
+const app = express();
 
-app.use(cors({ origin: "http://localhost:3000" }));
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
 
+// Middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN, 
+  credentials: true
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.get('/', (req, res) => {
-  res.send('Hello World')
+// Session configuration
+app.use(sessionConfig(db));
+
+// Routes
+app.use('/api/auth', authRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error'
+  });
 });
 
+
+
+// Start server
 app.listen(process.env.PORT, () => {
-  console.log(`Server is running on port ${process.env.PORT}`);
+  console.log(`Server running on port ${process.env.PORT}`);
 });
+
+module.exports = app;

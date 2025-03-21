@@ -16,10 +16,13 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
-    "mysql2": "^3.13.0",
+    "mysql2": "^3.14.0",
     "nodemon": "^3.1.9"
   },
   "dependencies": {
-    "express-mysql-session": "^3.0.3"
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.2",
+    "express-mysql-session": "^3.0.3",
+    "helmet": "^8.1.0"
   }
 }

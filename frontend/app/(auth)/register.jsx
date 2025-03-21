@@ -12,10 +12,12 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axios from 'axios';
 import { router } from 'expo-router';
 
 import image1 from "@/assets/images/image1.png";
+
+// Set the base URL for all fetch requests
+const BASE_URL = 'http://192.168.137.195:8080';
 
 const RegisterScreen = () => {
   const [username, setUsername] = useState('');
@@ -39,14 +41,24 @@ const RegisterScreen = () => {
 
     try {
       setLoading(true);
-      const response = await axios.post('/register', {
-        username,
-        email,
-        password,
-        phone_number: phoneNumber
+      // Using fetch instead of axios with the new BASE_URL
+      const response = await fetch(`${BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          phone_number: phoneNumber
+        }),
+        credentials: 'include' // Equivalent to axios.defaults.withCredentials = true
       });
 
-      if (response.data.success) {
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         Alert.alert(
           'Registration Successful', 
           'Your account has been created successfully. Please log in.',
@@ -58,13 +70,13 @@ const RegisterScreen = () => {
           ]
         );
       } else {
-        Alert.alert('Registration Failed', response.data.message);
+        Alert.alert('Registration Failed', data.message || 'Registration failed');
       }
     } catch (error) {
       console.error('Registration error:', error);
       Alert.alert(
         'Registration Failed',
-        error.response?.data?.message || 'Unable to connect to server'
+        'Unable to connect to server'
       );
     } finally {
       setLoading(false);

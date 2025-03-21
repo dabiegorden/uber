@@ -12,10 +12,12 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axios from 'axios';
 import { router } from 'expo-router';
 
 import image4 from "@/assets/images/image4.png";
+
+// Set the base URL for all fetch requests
+const BASE_URL = 'http://192.168.137.195:8080';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -28,28 +30,34 @@ const LoginScreen = () => {
       Alert.alert('Error', 'Please enter both email and password');
       return;
     }
-
+  
     try {
       setLoading(true);
-      const response = await axios.post('/login', {
-        email,
-        password
+      const response = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: email, // Use email as username
+          email,
+          password
+        }),
+        credentials: 'include' 
       });
-
-      if (response.data.success) {
-        // You might want to store the auth token here
-        // For example: await AsyncStorage.setItem('userToken', response.data.token);
-        
-        // Navigate to home or dashboard screen
+  
+      const data = await response.json();
+  
+      if (response.ok && data.success) {
         router.push('/map');
       } else {
-        Alert.alert('Login Failed', response.data.message);
+        Alert.alert('Login Failed', data.message || 'Login failed');
       }
     } catch (error) {
       console.error('Login error:', error);
       Alert.alert(
         'Login Failed',
-        error.response?.data?.message || 'Unable to connect to server'
+        'Unable to connect to server'
       );
     } finally {
       setLoading(false);
