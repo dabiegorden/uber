@@ -6,6 +6,7 @@ const sessionConfig = require('./config/session');
 const authRoutes = require('./routes/auth');
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
+const authController = require('./controllers/authController');
 dotenv.config();
 
 const app = express();
@@ -25,6 +26,11 @@ app.use(sessionConfig(db));
 
 // Routes
 app.use('/api/auth', authRoutes);
+
+// Update user location
+app.post('/api/update-location', (req, res) => {
+  authController.updateLocation(req, res);
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

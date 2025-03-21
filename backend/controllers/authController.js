@@ -142,7 +142,7 @@ const authController = {
       const userId = req.session.user.id;
       
       const [users] = await db.query(
-        'SELECT id, username, email, phone_number, profile_picture, role, created_at FROM users WHERE id = ?',
+        'SELECT id, username, email, phone_number, profile_picture, role, created_at, latitude, longitude, last_location_update FROM users WHERE id = ?',
         [userId]
       );
       
@@ -162,6 +162,39 @@ const authController = {
       return res.status(500).json({ 
         success: false, 
         message: 'Server error fetching profile' 
+      });
+    }
+  },
+  
+  // Update user location
+  updateLocation: async (req, res) => {
+    try {
+      const { latitude, longitude } = req.body;
+      
+      if (!req.session || !req.session.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+      
+      const userId = req.session.user.id;
+      
+      // Update user location in database
+      await db.query(
+        'UPDATE users SET latitude = ?, longitude = ?, last_location_update = NOW() WHERE id = ?',
+        [latitude, longitude, userId]
+      );
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Location updated successfully'
+      });
+    } catch (error) {
+      console.error('Update location error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Server error updating location'
       });
     }
   }

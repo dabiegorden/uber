@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 import image1 from "@/assets/images/image1.png";
 
 // Set the base URL for all fetch requests
-const BASE_URL = 'http://192.168.137.195:8080';
+const BASE_URL = 'http://192.168.137.198:8080';
 
 const RegisterScreen = () => {
   const [username, setUsername] = useState('');

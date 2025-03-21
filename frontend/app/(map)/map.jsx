@@ -12,9 +12,10 @@ import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import BottomSheetComponent from '../../components/BottomSheetComponent';
 
 // Set the base URL for all fetch requests
-const BASE_URL = 'http://192.168.137.195:8080';
+const BASE_URL = 'http://192.168.137.198:8080';
 
 const MapScreen = () => {
   const [location, setLocation] = useState(null);
@@ -151,9 +152,6 @@ const MapScreen = () => {
         credentials: 'include'
       });
       
-      // Clear any stored data
-      // await AsyncStorage.removeItem('userToken');
-      
       // Navigate to login
       router.replace('/login');
     } catch (error) {
@@ -172,14 +170,14 @@ const MapScreen = () => {
   }
 
   return (
-    <SafeAreaView className="flex-1">
+    <SafeAreaView className="flex-1" style={{ position: 'relative' }}>
       <View className="flex-1">
         {/* Header */}
         <View className="flex-row justify-between items-center p-4 bg-white border-b border-gray-200">
           <View>
-            <Text className="text-xl font-bold">Boat App</Text>
-            <Text className="text-gray-500">
-              Welcome, {user ? user.username || user.email : 'User'}
+            {/* <Text className="text-xl font-bold">Trycircle</Text> */}
+            <Text className="text-gray-500 font-bold text-xl">
+              Welcome, {user ? user.username : 'User'}
             </Text>
           </View>
           <TouchableOpacity 
@@ -227,6 +225,9 @@ const MapScreen = () => {
             </View>
           )}
         </View>
+        
+        {/* Bottom Sheet Component */}
+        <BottomSheetComponent />
       </View>
     </SafeAreaView>
   );
