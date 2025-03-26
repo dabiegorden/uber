@@ -5,7 +5,19 @@ const authController = {
   // Register a new user
   register: async (req, res) => {
     try {
-      const { username, email, password, phone_number } = req.body;
+      const { 
+        username, 
+        email, 
+        password, 
+        phone_number, 
+        // New driver-specific fields
+        is_driver,
+        driver_license,
+        vehicle_model,
+        vehicle_color,
+        vehicle_plate,
+        years_of_experience
+      } = req.body;
       
       // Check if required fields are present
       if (!username || !email || !password) {
@@ -28,21 +40,67 @@ const authController = {
         });
       }
       
+      // If registering as a driver, validate additional fields
+      if (is_driver) {
+        if (!driver_license || !vehicle_model || !vehicle_color || !vehicle_plate) {
+          return res.status(400).json({ 
+            success: false, 
+            message: 'Please provide all driver registration details' 
+          });
+        }
+        
+        // Check if driver license is already registered
+        const [existingDrivers] = await db.query(
+          'SELECT * FROM drivers WHERE driver_license = ?',
+          [driver_license]
+        );
+        
+        if (existingDrivers.length > 0) {
+          return res.status(409).json({ 
+            success: false, 
+            message: 'Driver license already registered' 
+          });
+        }
+      }
+      
       // Hash password
       const saltRounds = 10;
       const hashedPassword = await bcrypt.hash(password, saltRounds);
       
-      // Insert new user
-      const [result] = await db.query(
-        'INSERT INTO users (username, email, password, phone_number, role) VALUES (?, ?, ?, ?, ?)',
-        [username, email, hashedPassword, phone_number || null, 'user']
-      );
-      
-      return res.status(201).json({
-        success: true,
-        message: 'User registered successfully',
-        userId: result.insertId
-      });
+      // Start a transaction
+      const connection = await db.getConnection();
+      try {
+        await connection.beginTransaction();
+        
+        // Insert new user
+        const [userResult] = await connection.query(
+          'INSERT INTO users (username, email, password, phone_number, role, is_driver) VALUES (?, ?, ?, ?, ?, ?)',
+          [username, email, hashedPassword, phone_number || null, is_driver ? 'driver' : 'user', is_driver]
+        );
+        
+        // If driver, insert into drivers table
+        if (is_driver) {
+          await connection.query(
+            'INSERT INTO drivers (user_id, driver_license, vehicle_model, vehicle_color, vehicle_plate, years_of_experience) VALUES (?, ?, ?, ?, ?, ?)',
+            [userResult.insertId, driver_license, vehicle_model, vehicle_color, vehicle_plate, years_of_experience || null]
+          );
+        }
+        
+        // Commit transaction
+        await connection.commit();
+        
+        return res.status(201).json({
+          success: true,
+          message: 'User registered successfully',
+          userId: userResult.insertId,
+          userType: is_driver ? 'driver' : 'user'
+        });
+      } catch (transactionError) {
+        await connection.rollback();
+        throw transactionError;
+      } finally {
+        connection.release();
+      }
     } catch (error) {
       console.error('Registration error:', error);
       return res.status(500).json({ 
@@ -90,6 +148,14 @@ const authController = {
         });
       }
       
+      // Check if user is active
+      if (user.is_active === 0) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Your account has been deactivated' 
+        });
+      }
+      
       // Set user session
       req.session.user = {
         id: user.id,
@@ -100,13 +166,20 @@ const authController = {
       // Set user_id for the session store
       req.session.user_id = user.id;
       
+      // Determine the appropriate redirect route based on user role
+      let redirectRoute = '/map'; // Default route for regular users
+      if (user.role === 'admin') {
+        redirectRoute = '/admin';
+      }
+      
       return res.status(200).json({
         success: true,
         message: 'Login successful',
         user: {
           id: user.id,
           email: user.email,
-          role: user.role
+          role: user.role,
+          redirectRoute: redirectRoute
         }
       });
     } catch (error) {
@@ -197,7 +270,129 @@ const authController = {
         message: 'Server error updating location'
       });
     }
+  },
+
+  // Get users list for admin
+  getUsersList: async (req, res) => {
+    try {
+      const [users] = await db.query(
+        'SELECT id, username, email, phone_number, role, created_at FROM users WHERE role != "admin"'
+      );
+      
+      return res.status(200).json({
+        success: true,
+        users: users
+      });
+    } catch (error) {
+      console.error('Get users list error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Server error fetching users' 
+      });
+    }
+  },
+  
+  // Update user status (active/inactive)
+  updateUserStatus: async (req, res) => {
+    try {
+      const { userId, status } = req.body;
+      
+      await db.query(
+        'UPDATE users SET is_active = ? WHERE id = ? AND role != "admin"',
+        [status, userId]
+      );
+      
+      return res.status(200).json({
+        success: true,
+        message: 'User status updated successfully'
+      });
+    } catch (error) {
+      console.error('Update user status error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Server error updating user status' 
+      });
+    }
+  },
+
+  // Get driver profile
+getDriverProfile: async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    
+    const [drivers] = await db.query(
+      `SELECT d.*, u.username, u.email, u.phone_number 
+       FROM drivers d
+       JOIN users u ON d.user_id = u.id
+       WHERE d.user_id = ?`,
+      [userId]
+    );
+    
+    if (drivers.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Driver profile not found' 
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      driver: drivers[0]
+    });
+  } catch (error) {
+    console.error('Get driver profile error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error fetching driver profile' 
+    });
   }
+},
+
+// Get list of drivers for admin
+getDriversList: async (req, res) => {
+  try {
+    const [drivers] = await db.query(
+      `SELECT d.*, u.username, u.email, u.phone_number 
+       FROM drivers d
+       JOIN users u ON d.user_id = u.id`
+    );
+    
+    return res.status(200).json({
+      success: true,
+      drivers: drivers
+    });
+  } catch (error) {
+    console.error('Get drivers list error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error fetching drivers' 
+    });
+  }
+},
+
+// Verify driver by admin
+verifyDriver: async (req, res) => {
+  try {
+    const { driverId, isVerified } = req.body;
+    
+    await db.query(
+      'UPDATE drivers SET license_verified = ? WHERE id = ?',
+      [isVerified, driverId]
+    );
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Driver verification status updated'
+    });
+  } catch (error) {
+    console.error('Verify driver error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error verifying driver' 
+    });
+  }
+}
 };
+
 
 module.exports = authController;

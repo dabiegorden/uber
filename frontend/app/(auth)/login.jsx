@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 import image4 from "@/assets/images/image4.png";
 
 // Set the base URL for all fetch requests
-const BASE_URL = 'http://192.168.137.198:8080';
+const BASE_URL = 'http://192.168.137.92:8080';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -30,7 +30,7 @@ const LoginScreen = () => {
       Alert.alert('Error', 'Please enter both email and password');
       return;
     }
-  
+
     try {
       setLoading(true);
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
@@ -39,19 +39,23 @@ const LoginScreen = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: email, // Use email as username
           email,
           password
         }),
-        credentials: 'include' 
+        credentials: 'include'
       });
-  
+
       const data = await response.json();
-  
+
       if (response.ok && data.success) {
-        router.push('/map');
+        // Redirect based on user role
+        if (data.user.role === 'admin') {
+          router.push('/admin');
+        } else {
+          router.push('/map');
+        }
       } else {
-        Alert.alert('Login Failed', data.message || 'Login failed');
+        Alert.alert('Login Failed', data.message || 'Unable to log in');
       }
     } catch (error) {
       console.error('Login error:', error);

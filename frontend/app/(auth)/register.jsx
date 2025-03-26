@@ -9,15 +9,15 @@ import {
   Platform,
   ScrollView,
   Image,
-  Alert
+  Alert,
+  Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import image1 from "@/assets/images/image1.png";
 
-// Set the base URL for all fetch requests
-const BASE_URL = 'http://192.168.137.198:8080';
+const BASE_URL = 'http://192.168.137.92:8080';
 
 const RegisterScreen = () => {
   const [username, setUsername] = useState('');
@@ -26,6 +26,14 @@ const RegisterScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // New driver-specific state
+  const [isDriver, setIsDriver] = useState(false);
+  const [driverLicense, setDriverLicense] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [vehicleColor, setVehicleColor] = useState('');
+  const [vehiclePlate, setVehiclePlate] = useState('');
+  const [yearsOfExperience, setYearsOfExperience] = useState('');
 
   const handleRegister = async () => {
     // Validation
@@ -39,9 +47,16 @@ const RegisterScreen = () => {
       return;
     }
 
+    // Additional driver validation if driver registration
+    if (isDriver) {
+      if (!driverLicense || !vehicleModel || !vehicleColor || !vehiclePlate) {
+        Alert.alert('Error', 'Please fill in all driver registration fields');
+        return;
+      }
+    }
+
     try {
       setLoading(true);
-      // Using fetch instead of axios with the new BASE_URL
       const response = await fetch(`${BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
@@ -51,9 +66,16 @@ const RegisterScreen = () => {
           username,
           email,
           password,
-          phone_number: phoneNumber
+          phone_number: phoneNumber,
+          // Driver fields
+          is_driver: isDriver,
+          driver_license: isDriver ? driverLicense : null,
+          vehicle_model: isDriver ? vehicleModel : null,
+          vehicle_color: isDriver ? vehicleColor : null,
+          vehicle_plate: isDriver ? vehiclePlate : null,
+          years_of_experience: isDriver ? yearsOfExperience : null
         }),
-        credentials: 'include' // Equivalent to axios.defaults.withCredentials = true
+        credentials: 'include'
       });
 
       const data = await response.json();
@@ -61,7 +83,9 @@ const RegisterScreen = () => {
       if (response.ok && data.success) {
         Alert.alert(
           'Registration Successful', 
-          'Your account has been created successfully. Please log in.',
+          isDriver 
+            ? 'Your driver account has been created. Pending verification.' 
+            : 'Your account has been created successfully. Please log in.',
           [
             { 
               text: 'OK', 
@@ -104,6 +128,17 @@ const RegisterScreen = () => {
               <Text className="text-gray-500 mt-2">Sign up to get started</Text>
             </View>
 
+            {/* Existing user fields */}
+            <View className="mb-4 flex-row items-center justify-between">
+              <Text className="text-gray-700 font-medium">Register as Driver?</Text>
+              <Switch 
+                value={isDriver}
+                onValueChange={setIsDriver}
+              />
+            </View>
+
+            {/* Existing fields remain the same */}
+            {/* ... previous fields like username, email, password ... */}
             <View className="mb-4">
               <Text className="text-gray-700 mb-2 font-medium">Username *</Text>
               <TextInput
@@ -160,6 +195,61 @@ const RegisterScreen = () => {
               />
             </View>
 
+            {isDriver && (
+              <>
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Driver License *</Text>
+                  <TextInput
+                    className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                    value={driverLicense}
+                    onChangeText={setDriverLicense}
+                    placeholder="Enter your driver license number"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Vehicle Model *</Text>
+                  <TextInput
+                    className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                    value={vehicleModel}
+                    onChangeText={setVehicleModel}
+                    placeholder="Enter vehicle model"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Vehicle Color *</Text>
+                  <TextInput
+                    className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                    value={vehicleColor}
+                    onChangeText={setVehicleColor}
+                    placeholder="Enter vehicle color"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Vehicle Plate *</Text>
+                  <TextInput
+                    className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                    value={vehiclePlate}
+                    onChangeText={setVehiclePlate}
+                    placeholder="Enter vehicle plate number"
+                  />
+                </View>
+
+                <View className="mb-4">
+                  <Text className="text-gray-700 mb-2 font-medium">Years of Experience</Text>
+                  <TextInput
+                    className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                    value={yearsOfExperience}
+                    onChangeText={setYearsOfExperience}
+                    placeholder="Enter years of driving experience"
+                    keyboardType="numeric"
+                  />
+                </View>
+              </>
+            )}
+
             <TouchableOpacity
               className="bg-blue-600 rounded-lg py-4 items-center mb-6"
               onPress={handleRegister}
@@ -168,7 +258,9 @@ const RegisterScreen = () => {
               {loading ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
-                <Text className="text-white font-bold text-lg">Register</Text>
+                <Text className="text-white font-bold text-lg">
+                  {isDriver ? 'Register as Driver' : 'Register'}
+                </Text>
               )}
             </TouchableOpacity>
 
