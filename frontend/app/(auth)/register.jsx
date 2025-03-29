@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 
 import image1 from "@/assets/images/image1.png";
 
-const BASE_URL = 'http://192.168.137.22:8080';
+const BASE_URL = 'http://192.168.137.114:8080';
 
 const RegisterScreen = () => {
   const [username, setUsername] = useState('');

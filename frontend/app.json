@@ -4,12 +4,12 @@
     "slug": "tricycle",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/splash-icon.png",
+    "icon": "./assets/images/splash-icon.jpeg",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash-icon.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#011F5B"
     },
@@ -18,14 +18,14 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/splash-icon.png",
+        "foregroundImage": "./assets/images/splash-icon.jpeg",
         "backgroundColor": "#011F5B"
       }
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/splash-icon.png"
+      "favicon": "./assets/images/splash-icon.jpeg"
     },
     "plugins": [
       "expo-router"
