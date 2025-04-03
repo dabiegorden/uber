@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-const BASE_URL = 'http://192.168.137.183:8080';
+const BASE_URL = 'http://192.168.137.107:8080';
 
 export default function AccountScreen() {
   const [userData, setUserData] = useState(null);

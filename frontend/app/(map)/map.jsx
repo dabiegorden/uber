@@ -10,7 +10,7 @@ import { router } from "expo-router"
 import BottomSheetComponent from "../../components/BottomSheetComponent"
 
 // Set the base URL for all fetch requests
-const BASE_URL = "http://192.168.137.183:8080"
+const BASE_URL = "http://192.168.137.107:8080"
 
 const MapScreen = () => {
   const [location, setLocation] = useState(null)
