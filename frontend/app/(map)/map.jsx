@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -8,20 +8,24 @@ import {
   Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import BottomSheetComponent from '../../components/BottomSheetComponent';
 
 // Set the base URL for all fetch requests
-const BASE_URL = 'http://192.168.137.114:8080';
+const BASE_URL = 'http://192.168.137.183:8080';
 
 const MapScreen = () => {
   const [location, setLocation] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
+  const [nearbyDrivers, setNearbyDrivers] = useState([]);
+  const [selectedDriver, setSelectedDriver] = useState(null);
+  const [searchingDrivers, setSearchingDrivers] = useState(false);
+  const mapRef = useRef(null);
   
   // Get user profile info
   useEffect(() => {
@@ -141,6 +145,123 @@ const MapScreen = () => {
     }
   };
 
+  // Function to search for nearby drivers
+  const searchNearbyDrivers = async () => {
+    if (!location) {
+      Alert.alert('Error', 'Your location is not available');
+      return;
+    }
+    
+    setSearchingDrivers(true);
+    
+    try {
+      const response = await fetch(`${BASE_URL}/api/rides/nearby-drivers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          radius: 5 // 5km radius
+        }),
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setNearbyDrivers(data.drivers);
+        
+        // If drivers found, adjust map to show all markers
+        if (data.drivers.length > 0) {
+          fitAllMarkers([...data.drivers, { 
+            latitude: location.coords.latitude, 
+            longitude: location.coords.longitude 
+          }]);
+        } else {
+          Alert.alert('No Drivers', 'No available drivers found nearby');
+        }
+      } else {
+        Alert.alert('Error', data.message || 'Failed to find nearby drivers');
+      }
+    } catch (error) {
+      console.error('Error searching for drivers:', error);
+      Alert.alert('Error', 'Failed to search for nearby drivers');
+    } finally {
+      setSearchingDrivers(false);
+    }
+  };
+
+  // Function to fit all markers on the map
+  const fitAllMarkers = (markers) => {
+    if (mapRef.current && markers.length > 0) {
+      mapRef.current.fitToCoordinates(
+        markers.map(marker => ({
+          latitude: parseFloat(marker.latitude),
+          longitude: parseFloat(marker.longitude)
+        })),
+        {
+          edgePadding: { top: 50, right: 50, bottom: 200, left: 50 },
+          animated: true
+        }
+      );
+    }
+  };
+
+  // Function to request a ride
+  const requestRide = async (driver) => {
+    if (!location) {
+      Alert.alert('Error', 'Your location is not available');
+      return;
+    }
+    
+    setSelectedDriver(null);
+    
+    try {
+      const response = await fetch(`${BASE_URL}/api/rides/request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          driverId: driver.id,
+          pickupLocation: {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude
+          },
+          dropoffLocation: {
+            latitude: location.coords.latitude, // This would normally be different
+            longitude: location.coords.longitude // This would normally be different
+          }
+        }),
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        Alert.alert(
+          'Ride Requested',
+          'Your ride request has been sent to the driver',
+          [
+            { 
+              text: 'View Status', 
+              onPress: () => router.push(`/ride/${data.rideId}`) 
+            }
+          ]
+        );
+        // Clear driver markers after booking
+        setNearbyDrivers([]);
+      } else {
+        Alert.alert('Error', data.message || 'Failed to request ride');
+      }
+    } catch (error) {
+      console.error('Error requesting ride:', error);
+      Alert.alert('Error', 'Failed to request ride');
+    }
+  };
+
   // Handle logout
   const handleLogout = async () => {
     try {
@@ -175,7 +296,6 @@ const MapScreen = () => {
         {/* Header */}
         <View className="flex-row justify-between items-center p-4 bg-white border-b border-gray-200">
           <View>
-            {/* <Text className="text-xl font-bold">Trycircle</Text> */}
             <Text className="text-gray-500 font-bold text-xl">
               Welcome, {user ? user.username : 'User'}
             </Text>
@@ -199,6 +319,8 @@ const MapScreen = () => {
             </View>
           ) : location ? (
             <MapView
+              ref={mapRef}
+              provider={PROVIDER_GOOGLE}
               style={StyleSheet.absoluteFillObject}
               initialRegion={{
                 latitude: location.coords.latitude,
@@ -210,6 +332,7 @@ const MapScreen = () => {
               showsMyLocationButton
               followsUserLocation
             >
+              {/* User's current location marker */}
               <Marker
                 coordinate={{
                   latitude: location.coords.latitude,
@@ -217,17 +340,68 @@ const MapScreen = () => {
                 }}
                 title="You are here"
                 description="Your current location"
+                pinColor="blue"
               />
+              
+              {/* Driver markers */}
+              {nearbyDrivers.map((driver) => (
+                <Marker
+                  key={driver.id}
+                  coordinate={{
+                    latitude: parseFloat(driver.latitude),
+                    longitude: parseFloat(driver.longitude),
+                  }}
+                  title={driver.username}
+                  description={`${driver.vehicle_model} (${driver.vehicle_color})`}
+                  pinColor="green"
+                  onPress={() => setSelectedDriver(driver)}
+                >
+                  <Callout tooltip>
+                    <View className="bg-white p-3 rounded-lg shadow-md" style={{width: 150}}>
+                      <Text className="font-bold">{driver.username}</Text>
+                      <Text className="text-gray-700">{driver.vehicle_model}</Text>
+                      <Text className="text-gray-700">{driver.vehicle_color} · {driver.vehicle_plate}</Text>
+                      <Text className="text-gray-600 text-sm mt-1">{driver.distance.toFixed(1)} km away</Text>
+                      <TouchableOpacity 
+                        className="mt-2 bg-blue-500 py-2 px-4 rounded-lg"
+                        onPress={() => requestRide(driver)}
+                      >
+                        <Text className="text-white text-center font-medium">Book Now</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </Callout>
+                </Marker>
+              ))}
             </MapView>
           ) : (
             <View className="flex-1 justify-center items-center">
               <Text className="text-gray-600">Waiting for location data...</Text>
             </View>
           )}
+          
+          {/* Floating Search Button */}
+          {location && !searchingDrivers && (
+            <TouchableOpacity
+              onPress={searchNearbyDrivers}
+              className="absolute top-4 right-4 bg-blue-500 p-3 rounded-full shadow-lg"
+            >
+              <Ionicons name="search" size={24} color="white" />
+            </TouchableOpacity>
+          )}
+          
+          {/* Loading Indicator for Searching */}
+          {searchingDrivers && (
+            <View className="absolute top-4 right-4 bg-white p-2 rounded-full shadow-lg">
+              <ActivityIndicator size="small" color="#3b82f6" />
+            </View>
+          )}
         </View>
         
-        {/* Bottom Sheet Component */}
-        <BottomSheetComponent />
+        {/* Bottom Sheet Component with prop for searching */}
+        <BottomSheetComponent 
+          onSearchDrivers={searchNearbyDrivers}
+          searchingDrivers={searchingDrivers}
+        />
       </View>
     </SafeAreaView>
   );

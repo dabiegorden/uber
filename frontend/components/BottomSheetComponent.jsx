@@ -10,15 +10,16 @@ import {
   TextInput,
   Keyboard,
   KeyboardAvoidingView,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import { usePathname } from 'expo-router';
-import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 
+// Assuming the image is imported correctly
 import image2 from "../assets/images/image2.png";
 
 const { height, width } = Dimensions.get('window');
@@ -31,12 +32,13 @@ const BOTTOM_SHEET_SNAP_POINTS = {
   OPEN: BOTTOM_SHEET_MAX_HEIGHT,
 };
 
-const BottomSheetComponent = () => {
+const BottomSheetComponent = ({ onSearchDrivers, searchingDrivers }) => {
   const bottomSheetHeight = useRef(new Animated.Value(BOTTOM_SHEET_SNAP_POINTS.PEEK)).current;
   const [expanded, setExpanded] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
+  const [destinationFocus, setDestinationFocus] = useState(false);
   const searchInputRef = useRef(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -164,6 +166,14 @@ const BottomSheetComponent = () => {
       Keyboard.dismiss();
     }
   };
+
+  // Handle search for driver
+  const handleSearchDrivers = () => {
+    dismissKeyboard();
+    if (onSearchDrivers) {
+      onSearchDrivers();
+    }
+  };
   
   return (
     <GestureHandlerRootView className="absolute h-full w-full z-10">
@@ -221,6 +231,22 @@ const BottomSheetComponent = () => {
               
               <TouchableWithoutFeedback onPress={dismissKeyboard}>
                 <View className="flex-1">
+                  {/* Find Drivers Button */}
+                  <TouchableOpacity 
+                    className={`flex-row items-center justify-center bg-blue-500 p-4 rounded-lg mb-4 ${searchingDrivers ? 'opacity-70' : ''}`}
+                    onPress={handleSearchDrivers}
+                    disabled={searchingDrivers}
+                  >
+                    {searchingDrivers ? (
+                      <ActivityIndicator size="small" color="#ffffff" style={{marginRight: 10}} />
+                    ) : (
+                      <Ionicons name="car-outline" size={24} color="#fff" style={{marginRight: 10}} />
+                    )}
+                    <Text className="text-lg font-bold text-white">
+                      {searchingDrivers ? 'Finding Drivers...' : 'Find Nearby Drivers'}
+                    </Text>
+                  </TouchableOpacity>
+                  
                   {/* Ride Options */}
                   <View className="flex-row items-center bg-gray-50 p-4 rounded-lg mb-4">
                     <View className="w-16 h-16 rounded-lg bg-gray-200 justify-center items-center mr-3">
@@ -287,35 +313,35 @@ const BottomSheetComponent = () => {
                 onPress={() => router.push('/(map)/map')}
               >
                 <Ionicons 
-                  name={pathname === '/(tabs)/home' ? 'home' : 'home-outline'} 
+                  name={pathname === '/(map)/map' ? 'map' : 'map-outline'} 
                   size={24} 
-                  color={pathname === '/(tabs)/home' ? '#333' : '#777'} 
+                  color={pathname === '/(map)/map' ? '#3b82f6' : '#777'} 
                 />
-                <Text className={`text-xs mt-1 ${pathname === '/(tabs)/home' ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>Home</Text>
+                <Text className={`text-xs mt-1 ${pathname === '/(map)/map' ? 'text-blue-500 font-medium' : 'text-gray-500'}`}>Home</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
                 className="items-center justify-center h-12 w-16" 
-                onPress={() => navigateToTab('rides')}
+                onPress={() => router.push('/(tabs)/rides')}
               >
                 <Ionicons 
                   name={pathname === '/(tabs)/rides' ? 'time' : 'time-outline'} 
                   size={24} 
-                  color={pathname === '/(tabs)/rides' ? '#333' : '#777'} 
+                  color={pathname === '/(tabs)/rides' ? '#3b82f6' : '#777'} 
                 />
-                <Text className={`text-xs mt-1 ${pathname === '/(tabs)/rides' ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>Rides</Text>
+                <Text className={`text-xs mt-1 ${pathname === '/(tabs)/rides' ? 'text-blue-500 font-medium' : 'text-gray-500'}`}>Rides</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
                 className="items-center justify-center h-12 w-16"
-                onPress={() => router.push('/(tabs)/accounts')}
+                onPress={() => router.push('/(tabs)/account')}
               >
                 <Ionicons 
-                  name={pathname === '/(tabs)/accounts' ? 'person-circle' : 'person-circle-outline'} 
+                  name={pathname === '/(tabs)/account' ? 'person-circle' : 'person-circle-outline'} 
                   size={24} 
-                  color={pathname === '/(tabs)/accounts' ? '#333' : '#777'} 
+                  color={pathname === '/(tabs)/account' ? '#3b82f6' : '#777'} 
                 />
-                <Text className={`text-xs mt-1 ${pathname === '/(tabs)/accounts' ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>Account</Text>
+                <Text className={`text-xs mt-1 ${pathname === '/(tabs)/account' ? 'text-blue-500 font-medium' : 'text-gray-500'}`}>Account</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>

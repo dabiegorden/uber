@@ -4,13 +4,13 @@ const helmet = require('helmet');
 const db = require('./config/database');
 const sessionConfig = require('./config/session');
 const authRoutes = require('./routes/auth');
+const rideRoutes = require('./routes/rideRoutes'); // Add this line
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const authController = require('./controllers/authController');
 dotenv.config();
 
 const app = express();
-
 
 // Middleware
 app.use(helmet());
@@ -26,6 +26,7 @@ app.use(sessionConfig(db));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/rides', rideRoutes); // Add this line
 
 // Update user location
 app.post('/api/update-location', (req, res) => {
@@ -40,9 +41,6 @@ app.use((err, req, res, next) => {
     message: 'Internal server error'
   });
 });
-
-
-
 
 // Start server
 app.listen(process.env.PORT, () => {
