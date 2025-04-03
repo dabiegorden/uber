@@ -1,18 +1,18 @@
-const express = require('express');
-const router = express.Router();
-const rideController = require('../controllers/rideController');
-const { isAuthenticated } = require('../middleware/authMiddleware');
+const express = require("express")
+const router = express.Router()
+const rideController = require("../controllers/rideController")
 
-// Find nearby drivers
-router.post('/nearby-drivers', isAuthenticated, rideController.findNearbyDrivers);
+// Route to find nearby drivers
+router.post("/nearby-drivers", rideController.findNearbyDrivers)
 
-// Request a ride
-router.post('/request', isAuthenticated, rideController.requestRide);
+// Route to request a ride
+router.post("/request", rideController.requestRide)
 
-// Get ride status
-router.get('/:rideId', isAuthenticated, rideController.getRideStatus);
+// Route to get ride status
+router.get("/:rideId", rideController.getRideStatus)
 
-// Update driver availability
-router.put('/availability', isAuthenticated, rideController.updateAvailability);
+// Route for drivers to update their availability
+router.post("/update-availability", rideController.updateAvailability)
 
-module.exports = router;
+module.exports = router
+
