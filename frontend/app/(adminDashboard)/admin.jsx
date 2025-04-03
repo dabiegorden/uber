@@ -5,7 +5,7 @@ import { MaterialIcons, FontAwesome, Ionicons, Feather } from '@expo/vector-icon
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 
-const BASE_URL = 'http://192.168.137.107:8080';
+const BASE_URL = 'http://192.168.137.183:8080';
 
 export default function AdminDashboard() {
   const navigation = useNavigation();
