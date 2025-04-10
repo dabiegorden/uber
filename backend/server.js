@@ -4,7 +4,9 @@ const helmet = require('helmet');
 const db = require('./config/database');
 const sessionConfig = require('./config/session');
 const authRoutes = require('./routes/auth');
-const rideRoutes = require('./routes/rideRoutes'); // Add this line
+const rideRoutes = require('./routes/rideRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes'); // Add this line
 const dotenv = require('dotenv');
 const bcrypt = require('bcrypt');
 const authController = require('./controllers/authController');
@@ -26,7 +28,9 @@ app.use(sessionConfig(db));
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/rides', rideRoutes); // Add this line
+app.use('/api/rides', rideRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/admin', adminRoutes); // Add this line
 
 // Update user location
 app.post('/api/update-location', (req, res) => {

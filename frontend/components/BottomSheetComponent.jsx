@@ -1,239 +1,242 @@
-"use client"
+import React, { useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import BottomSheet from '@gorhom/bottom-sheet';
+import { GooglePlacesAutocomplete } from 'react-native-google-places-autocomplete';
 
-import { useRef, useState } from "react"
-import { View, Text, TouchableOpacity, Dimensions, Animated, Image, Platform, ActivityIndicator } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { GestureHandlerRootView, PanGestureHandler, State } from "react-native-gesture-handler"
-import { useRouter } from "expo-router"
-import { usePathname } from "expo-router"
-
-// Assuming the image is imported correctly
-import image2 from "../assets/images/image2.png"
-
-const { height, width } = Dimensions.get("window")
-
-const BOTTOM_SHEET_MIN_HEIGHT = 250
-const BOTTOM_SHEET_MAX_HEIGHT = height * 0.85
-const BOTTOM_SHEET_SNAP_POINTS = {
-  CLOSED: 0,
-  PEEK: BOTTOM_SHEET_MIN_HEIGHT,
-  OPEN: BOTTOM_SHEET_MAX_HEIGHT,
-}
+const BASE_URL = "http://192.168.137.183:8080";
 
 const BottomSheetComponent = ({ onSearchDrivers, searchingDrivers }) => {
-  const bottomSheetHeight = useRef(new Animated.Value(BOTTOM_SHEET_SNAP_POINTS.PEEK)).current
-  const [expanded, setExpanded] = useState(false)
-  const panY = useRef(new Animated.Value(0)).current
-  const router = useRouter()
-  const pathname = usePathname()
+  const bottomSheetRef = useRef(null);
+  const [destination, setDestination] = useState(null);
+  const [fare, setFare] = useState(null);
+  const [calculating, setCalculating] = useState(false);
 
-  // Function to snap the bottom sheet to a specific height
-  const snapToHeight = (toValue) => {
-    Animated.spring(bottomSheetHeight, {
-      toValue,
-      useNativeDriver: false,
-      bounciness: 4,
-      speed: 12,
-    }).start()
+  const calculateFare = async (destinationLocation) => {
+    if (!destinationLocation) return;
 
-    setExpanded(toValue === BOTTOM_SHEET_SNAP_POINTS.OPEN)
-  }
-
-  // Handler for gesture events
-  const onGestureEvent = Animated.event([{ nativeEvent: { translationY: panY } }], { useNativeDriver: false })
-
-  // Handler for when gesture ends
-  const onHandlerStateChange = (event) => {
-    if (event.nativeEvent.oldState === State.ACTIVE) {
-      const { translationY } = event.nativeEvent
-      const currentHeight = bottomSheetHeight.__getValue()
-
-      // Determine direction and distance of swipe
-      if (translationY < -50) {
-        // Swiping up significantly
-        snapToHeight(BOTTOM_SHEET_SNAP_POINTS.OPEN)
-      } else if (translationY > 50) {
-        // Swiping down significantly
-        snapToHeight(BOTTOM_SHEET_SNAP_POINTS.PEEK)
-      } else {
-        // Small movement, snap to nearest point
-        const shouldOpen = currentHeight > (BOTTOM_SHEET_MIN_HEIGHT + BOTTOM_SHEET_MAX_HEIGHT) / 2
-        snapToHeight(shouldOpen ? BOTTOM_SHEET_SNAP_POINTS.OPEN : BOTTOM_SHEET_SNAP_POINTS.PEEK)
+    setCalculating(true);
+    try {
+      // Get current location
+      const locationResponse = await fetch(`${BASE_URL}/api/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include'
+      });
+      
+      const locationData = await locationResponse.json();
+      
+      if (!locationData.success || !locationData.user.latitude || !locationData.user.longitude) {
+        console.error('Could not get current location');
+        return;
       }
+      
+      const currentLocation = {
+        latitude: locationData.user.latitude,
+        longitude: locationData.user.longitude
+      };
 
-      // Reset the translation
-      panY.setValue(0)
+      // Calculate fare
+      const response = await fetch(`${BASE_URL}/api/rides/calculate-fare`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pickupLocation: currentLocation,
+          dropoffLocation: destinationLocation
+        }),
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setFare(data);
+      }
+    } catch (error) {
+      console.error('Error calculating fare:', error);
+    } finally {
+      setCalculating(false);
     }
-  }
-
-  // Update the bottom sheet height when drag happens
-  const animatedHeight = Animated.add(
-    bottomSheetHeight,
-    panY.interpolate({
-      inputRange: [-300, 300],
-      outputRange: [150, -150], // Reduced range for smoother dragging
-      extrapolate: "clamp",
-    }),
-  ).interpolate({
-    inputRange: [BOTTOM_SHEET_MIN_HEIGHT, BOTTOM_SHEET_MAX_HEIGHT],
-    outputRange: [BOTTOM_SHEET_MIN_HEIGHT, BOTTOM_SHEET_MAX_HEIGHT],
-    extrapolate: "clamp",
-  })
-
-  const toggleExpanded = () => {
-    snapToHeight(expanded ? BOTTOM_SHEET_SNAP_POINTS.PEEK : BOTTOM_SHEET_SNAP_POINTS.OPEN)
-  }
-
-  // Handle search for driver
-  const handleSearchDrivers = () => {
-    if (onSearchDrivers) {
-      onSearchDrivers()
-    }
-  }
+  };
 
   return (
-    <GestureHandlerRootView className="absolute h-full w-full z-10">
-      <PanGestureHandler onGestureEvent={onGestureEvent} onHandlerStateChange={onHandlerStateChange}>
-        <Animated.View
-          className="absolute w-full bottom-0 bg-white rounded-t-3xl shadow-md"
-          style={{ height: animatedHeight }}
-        >
-          {/* Handle indicator */}
-          <TouchableOpacity className="items-center pt-3 pb-1" onPress={toggleExpanded} activeOpacity={0.7}>
-            <View className="w-10 h-1 rounded-full bg-gray-300" />
-          </TouchableOpacity>
+    <BottomSheet
+      ref={bottomSheetRef}
+      index={0}
+      snapPoints={['15%', '50%', '75%']}
+      handleIndicatorStyle={{ backgroundColor: '#CCCCCC', width: 50 }}
+      backgroundStyle={{ backgroundColor: 'white' }}
+    >
+      <View style={styles.contentContainer}>
+        <Text style={styles.title}>Where to?</Text>
+        
+        <GooglePlacesAutocomplete
+          placeholder='Enter destination'
+          onPress={(data, details = null) => {
+            if (details) {
+              const destinationLocation = {
+                latitude: details.geometry.location.lat,
+                longitude: details.geometry.location.lng
+              };
+              setDestination({
+                name: data.description,
+                location: destinationLocation
+              });
+              calculateFare(destinationLocation);
+            }
+          }}
+          fetchDetails={true}
+          query={{
+            key: 'YOUR_GOOGLE_PLACES_API_KEY',
+            language: 'en',
+          }}
+          styles={{
+            container: {
+              flex: 0,
+              marginBottom: 15
+            },
+            textInputContainer: {
+              backgroundColor: '#F2F2F2',
+              borderRadius: 8,
+              paddingHorizontal: 5
+            },
+            textInput: {
+              height: 45,
+              color: '#000',
+              fontSize: 16,
+              backgroundColor: '#F2F2F2'
+            },
+            predefinedPlacesDescription: {
+              color: '#1faadb'
+            },
+          }}
+        />
 
-          {/* Content */}
-          <View className="flex-1 p-4">
-            <View className="flex-1">
-              {/* Find Drivers Button */}
-              <TouchableOpacity
-                className={`flex-row items-center justify-center bg-blue-500 p-4 rounded-lg mb-4 ${searchingDrivers ? "opacity-70" : ""}`}
-                onPress={handleSearchDrivers}
-                disabled={searchingDrivers}
-              >
-                {searchingDrivers ? (
-                  <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 10 }} />
-                ) : (
-                  <Ionicons name="car-outline" size={24} color="#fff" style={{ marginRight: 10 }} />
-                )}
-                <Text className="text-lg font-bold text-white">
-                  {searchingDrivers ? "Finding Drivers..." : "Find Nearby Drivers"}
-                </Text>
-              </TouchableOpacity>
+        {calculating && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#3B82F6" />
+            <Text style={styles.loadingText}>Calculating fare...</Text>
+          </View>
+        )}
 
-              {/* Ride Options */}
-              <View className="flex-row items-center bg-gray-50 p-4 rounded-lg mb-4">
-                <View className="w-16 h-16 rounded-lg bg-gray-200 justify-center items-center mr-3">
-                  <Image source={image2} className="w-12 h-8 resize-contain" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-lg font-bold text-gray-800">Rides</Text>
-                  <Text className="text-sm text-gray-500 mt-1">Let's get moving</Text>
-                </View>
-              </View>
-
-              {/* Calendar Connection */}
-              <View className="flex-row items-center py-3 px-2 rounded-lg">
-                <View className="w-10 h-10 rounded-lg bg-green-500 justify-center items-center mr-3">
-                  <Ionicons name="calendar" size={24} color="#fff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-base font-semibold text-gray-800">Always arrive on time</Text>
-                  <Text className="text-sm text-gray-500 mt-0.5">Calendar connection makes it easy</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#ccc" />
-              </View>
-
-              {/* Expanded Content (only visible when expanded) */}
-              {expanded && (
-                <View className="mt-5">
-                  <Text className="text-base font-bold mb-3 text-gray-800">Saved Places</Text>
-
-                  <TouchableOpacity className="flex-row items-center py-3 border-b border-gray-100">
-                    <View className="w-9 h-9 rounded-full bg-gray-100 justify-center items-center mr-3">
-                      <Ionicons name="home-outline" size={20} color="#333" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-base font-medium text-gray-800">Home</Text>
-                      <Text className="text-sm text-gray-500 mt-0.5">Add home address</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity className="flex-row items-center py-3 border-b border-gray-100">
-                    <View className="w-9 h-9 rounded-full bg-gray-100 justify-center items-center mr-3">
-                      <Ionicons name="briefcase-outline" size={20} color="#333" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-base font-medium text-gray-800">Work</Text>
-                      <Text className="text-sm text-gray-500 mt-0.5">Add work address</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <Text className="text-base font-bold mb-3 mt-5 text-gray-800">Recent Trips</Text>
-                  <Text className="text-sm text-gray-500 mt-2 italic">No recent trips</Text>
-                </View>
-              )}
+        {fare && (
+          <View style={styles.fareContainer}>
+            <View style={styles.fareRow}>
+              <Text style={styles.fareLabel}>Distance:</Text>
+              <Text style={styles.fareValue}>{fare.distance.toFixed(2)} km</Text>
+            </View>
+            <View style={styles.fareRow}>
+              <Text style={styles.fareLabel}>Base Fare:</Text>
+              <Text style={styles.fareValue}>${fare.breakdown.baseFare.toFixed(2)}</Text>
+            </View>
+            <View style={styles.fareRow}>
+              <Text style={styles.fareLabel}>Distance Fare:</Text>
+              <Text style={styles.fareValue}>${fare.breakdown.distanceFare.toFixed(2)}</Text>
+            </View>
+            <View style={styles.fareRowTotal}>
+              <Text style={styles.fareLabelTotal}>Total Fare:</Text>
+              <Text style={styles.fareValueTotal}>${fare.fare.toFixed(2)}</Text>
             </View>
           </View>
+        )}
 
-          {/* Bottom Tab Bar */}
-          <View
-            className={`flex-row justify-around border-t border-gray-100 pt-2 ${Platform.OS === "ios" ? "pb-6" : "pb-2"} bg-white`}
-          >
-            <TouchableOpacity
-              className="items-center justify-center h-12 w-16"
-              onPress={() => router.push("/(map)/map")}
-            >
-              <Ionicons
-                name={pathname === "/(map)/map" ? "map" : "map-outline"}
-                size={24}
-                color={pathname === "/(map)/map" ? "#3b82f6" : "#777"}
-              />
-              <Text
-                className={`text-xs mt-1 ${pathname === "/(map)/map" ? "text-blue-500 font-medium" : "text-gray-500"}`}
-              >
-                Home
-              </Text>
-            </TouchableOpacity>
+        <TouchableOpacity 
+          style={[
+            styles.searchButton, 
+            (!destination || searchingDrivers) && styles.disabledButton
+          ]}
+          onPress={onSearchDrivers}
+          disabled={!destination || searchingDrivers}
+        >
+          {searchingDrivers ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <>
+              <Ionicons name="search" size={20} color="white" />
+              <Text style={styles.searchButtonText}>Find Drivers</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </BottomSheet>
+  );
+};
 
-            <TouchableOpacity
-              className="items-center justify-center h-12 w-16"
-              onPress={() => router.push("/(tabs)/rides")}
-            >
-              <Ionicons
-                name={pathname === "/(tabs)/rides" ? "time" : "time-outline"}
-                size={24}
-                color={pathname === "/(tabs)/rides" ? "#3b82f6" : "#777"}
-              />
-              <Text
-                className={`text-xs mt-1 ${pathname === "/(tabs)/rides" ? "text-blue-500 font-medium" : "text-gray-500"}`}
-              >
-                Rides
-              </Text>
-            </TouchableOpacity>
+const styles = StyleSheet.create({
+  contentContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  searchButton: {
+    backgroundColor: '#3B82F6',
+    padding: 15,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  disabledButton: {
+    backgroundColor: '#A0AEC0',
+  },
+  searchButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  loadingText: {
+    marginLeft: 10,
+    color: '#666',
+  },
+  fareContainer: {
+    backgroundColor: '#F9FAFB',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+  },
+  fareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  fareRowTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  fareLabel: {
+    color: '#4B5563',
+  },
+  fareValue: {
+    color: '#1F2937',
+    fontWeight: '500',
+  },
+  fareLabelTotal: {
+    color: '#1F2937',
+    fontWeight: 'bold',
+  },
+  fareValueTotal: {
+    color: '#3B82F6',
+    fontWeight: 'bold',
+  },
+});
 
-            <TouchableOpacity
-              className="items-center justify-center h-12 w-16"
-              onPress={() => router.push("/(tabs)/accounts")}
-            >
-              <Ionicons
-                name={pathname === "/(tabs)/accounts" ? "person-circle" : "person-circle-outline"}
-                size={24}
-                color={pathname === "/(tabs)/accounts" ? "#3b82f6" : "#777"}
-              />
-              <Text
-                className={`text-xs mt-1 ${pathname === "/(tabs)/accounts" ? "text-blue-500 font-medium" : "text-gray-500"}`}
-              >
-                Account
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </PanGestureHandler>
-    </GestureHandlerRootView>
-  )
-}
-
-export default BottomSheetComponent
-
+export default BottomSheetComponent;
