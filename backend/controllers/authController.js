@@ -3,193 +3,201 @@ const db = require("../config/database");
 
 const authController = {
   // Register a new user
-  register: async (req, res) => {
-    try {
-      const { 
-        username, 
-        email, 
-        password, 
-        phone_number, 
-        // New driver-specific fields
-        is_driver,
-        driver_license,
-        vehicle_model,
-        vehicle_color,
-        vehicle_plate,
-        years_of_experience
-      } = req.body;
-      
-      // Check if required fields are present
-      if (!username || !email || !password) {
+register: async (req, res) => {
+  try {
+    const { 
+      username, 
+      email, 
+      password, 
+      phone_number, 
+      // Driver-specific fields
+      is_driver,
+      driver_license,
+      vehicle_model,
+      vehicle_color,
+      vehicle_plate,
+      years_of_experience
+    } = req.body;
+    
+    // Check if required fields are present
+    if (!username || !email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide username, email, and password' 
+      });
+    }
+    
+    // Check if user already exists
+    const [existingUsers] = await db.query(
+      'SELECT * FROM users WHERE email = ?',
+      [email]
+    );
+    
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'Email already in use' 
+      });
+    }
+    
+    // If registering as a driver, validate additional fields
+    if (is_driver) {
+      if (!driver_license || !vehicle_model || !vehicle_color || !vehicle_plate) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Please provide username, email, and password' 
+          message: 'Please provide all driver registration details' 
         });
       }
       
-      // Check if user already exists
-      const [existingUsers] = await db.query(
-        'SELECT * FROM users WHERE email = ?',
-        [email]
+      // Check if driver license is already registered
+      const [existingDrivers] = await db.query(
+        'SELECT * FROM drivers WHERE driver_license = ?',
+        [driver_license]
       );
       
-      if (existingUsers.length > 0) {
+      if (existingDrivers.length > 0) {
         return res.status(409).json({ 
           success: false, 
-          message: 'Email already in use' 
+          message: 'Driver license already registered' 
         });
       }
-      
-      // If registering as a driver, validate additional fields
-      if (is_driver) {
-        if (!driver_license || !vehicle_model || !vehicle_color || !vehicle_plate) {
-          return res.status(400).json({ 
-            success: false, 
-            message: 'Please provide all driver registration details' 
-          });
-        }
-        
-        // Check if driver license is already registered
-        const [existingDrivers] = await db.query(
-          'SELECT * FROM drivers WHERE driver_license = ?',
-          [driver_license]
-        );
-        
-        if (existingDrivers.length > 0) {
-          return res.status(409).json({ 
-            success: false, 
-            message: 'Driver license already registered' 
-          });
-        }
-      }
-      
-      // Hash password
-      const saltRounds = 10;
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
-      
-      // Start a transaction
-      const connection = await db.getConnection();
-      try {
-        await connection.beginTransaction();
-        
-        // Insert new user
-        const [userResult] = await connection.query(
-          'INSERT INTO users (username, email, password, phone_number, role, is_driver) VALUES (?, ?, ?, ?, ?, ?)',
-          [username, email, hashedPassword, phone_number || null, is_driver ? 'driver' : 'user', is_driver]
-        );
-        
-        // If driver, insert into drivers table
-        if (is_driver) {
-          await connection.query(
-            'INSERT INTO drivers (user_id, driver_license, vehicle_model, vehicle_color, vehicle_plate, years_of_experience) VALUES (?, ?, ?, ?, ?, ?)',
-            [userResult.insertId, driver_license, vehicle_model, vehicle_color, vehicle_plate, years_of_experience || null]
-          );
-        }
-        
-        // Commit transaction
-        await connection.commit();
-        
-        return res.status(201).json({
-          success: true,
-          message: 'User registered successfully',
-          userId: userResult.insertId,
-          userType: is_driver ? 'driver' : 'user'
-        });
-      } catch (transactionError) {
-        await connection.rollback();
-        throw transactionError;
-      } finally {
-        connection.release();
-      }
-    } catch (error) {
-      console.error('Registration error:', error);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Server error during registration' 
-      });
     }
-  },
-  
-  // User login
-  login: async (req, res) => {
+    
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    
+    // Get vehicle image path if uploaded
+    const vehicleImagePath = req.file ? `/uploads/vehicles/${req.file.filename}` : null;
+    
+    // Start a transaction
+    const connection = await db.getConnection();
     try {
-      const { email, password } = req.body;
+      await connection.beginTransaction();
       
-      // Check if required fields are present
-      if (!email || !password) {
-        return res.status(400).json({ 
-          success: false, 
-          message: 'Please provide email and password' 
-        });
-      }
-      
-      // Find user by email
-      const [users] = await db.query(
-        'SELECT * FROM users WHERE email = ?',
-        [email]
+      // Insert new user
+      const [userResult] = await connection.query(
+        'INSERT INTO users (username, email, password, phone_number, role, is_driver) VALUES (?, ?, ?, ?, ?, ?)',
+        [username, email, hashedPassword, phone_number || null, is_driver ? 'driver' : 'user', is_driver]
       );
       
-      if (users.length === 0) {
-        return res.status(401).json({ 
-          success: false, 
-          message: 'Invalid credentials' 
-        });
+      // If driver, insert into drivers table
+      if (is_driver) {
+        await connection.query(
+          'INSERT INTO drivers (user_id, driver_license, vehicle_model, vehicle_color, vehicle_plate, years_of_experience, vehicle_image) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [userResult.insertId, driver_license, vehicle_model, vehicle_color, vehicle_plate, years_of_experience || null, vehicleImagePath]
+        );
       }
       
-      const user = users[0];
+      // Commit transaction
+      await connection.commit();
       
-      // Compare passwords
-      const passwordMatch = await bcrypt.compare(password, user.password);
-      
-      if (!passwordMatch) {
-        return res.status(401).json({ 
-          success: false, 
-          message: 'Invalid credentials' 
-        });
-      }
-      
-      // Check if user is active
-      if (user.is_active === 0) {
-        return res.status(403).json({ 
-          success: false, 
-          message: 'Your account has been deactivated' 
-        });
-      }
-      
-      // Set user session
-      req.session.user = {
-        id: user.id,
-        email: user.email,
-        role: user.role
-      };
-      
-      // Set user_id for the session store
-      req.session.user_id = user.id;
-      
-      // Determine the appropriate redirect route based on user role
-      let redirectRoute = '/map'; // Default route for regular users
-      if (user.role === 'admin') {
-        redirectRoute = '/admin';
-      }
-      
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
-        message: 'Login successful',
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          redirectRoute: redirectRoute
-        }
+        message: 'User registered successfully',
+        userId: userResult.insertId,
+        userType: is_driver ? 'driver' : 'user'
       });
-    } catch (error) {
-      console.error('Login error:', error);
-      return res.status(500).json({ 
+    } catch (transactionError) {
+      await connection.rollback();
+      throw transactionError;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Registration error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error during registration' 
+    });
+  }
+},
+  
+  // User login
+// Update controllers/authController.js - login function
+
+login: async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    // Check if required fields are present
+    if (!email || !password) {
+      return res.status(400).json({ 
         success: false, 
-        message: 'Server error during login' 
+        message: 'Please provide email and password' 
       });
     }
-  },
+    
+    // Find user by email
+    const [users] = await db.query(
+      'SELECT * FROM users WHERE email = ?',
+      [email]
+    );
+    
+    if (users.length === 0) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+    
+    const user = users[0];
+    
+    // Compare passwords
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    
+    if (!passwordMatch) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials' 
+      });
+    }
+    
+    // Check if user is active
+    if (user.is_active === 0) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Your account has been deactivated' 
+      });
+    }
+    
+    // Set user session
+    req.session.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    };
+    
+    // Set user_id for the session store
+    req.session.user_id = user.id;
+    
+    // Determine the appropriate redirect route based on user role
+    let redirectRoute = '/map'; // Default route for regular users
+    if (user.role === 'admin') {
+      redirectRoute = '/admin';
+    } else if (user.role === 'driver') {
+      redirectRoute = '/driver-dashboard';
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        redirectRoute: redirectRoute
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Server error during login' 
+    });
+  }
+},
   
   // User logout
   logout: (req, res) => {

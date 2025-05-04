@@ -1,3 +1,5 @@
+// Update controllers/paymentController.js
+
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -83,16 +85,56 @@ const paymentController = {
         });
       }
 
-      // Update ride status to paid
-      await db.query(
-        'UPDATE rides SET payment_status = "paid", status = "completed" WHERE id = ? AND payment_intent_id = ?',
+      // Get ride details to record driver earnings
+      const [rides] = await db.query(
+        'SELECT * FROM rides WHERE id = ? AND payment_intent_id = ?',
         [rideId, paymentIntentId]
       );
 
-      return res.status(200).json({
-        success: true,
-        message: 'Payment confirmed successfully'
-      });
+      if (rides.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Ride not found'
+        });
+      }
+
+      const ride = rides[0];
+
+      // Start a transaction
+      const connection = await db.getConnection();
+      try {
+        await connection.beginTransaction();
+
+        // Update ride status to paid
+        await connection.query(
+          'UPDATE rides SET payment_status = "paid", status = "completed" WHERE id = ? AND payment_intent_id = ?',
+          [rideId, paymentIntentId]
+        );
+
+        // Record driver earnings
+        await connection.query(
+          'INSERT INTO driver_earnings (driver_id, ride_id, amount) VALUES (?, ?, ?)',
+          [ride.driver_id, rideId, ride.fare]
+        );
+
+        // Make driver available again
+        await connection.query(
+          'UPDATE drivers SET available = 1 WHERE user_id = ?',
+          [ride.driver_id]
+        );
+
+        await connection.commit();
+
+        return res.status(200).json({
+          success: true,
+          message: 'Payment confirmed successfully'
+        });
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        connection.release();
+      }
     } catch (error) {
       console.error('Payment confirmation error:', error);
       return res.status(500).json({

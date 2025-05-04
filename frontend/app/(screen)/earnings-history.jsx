@@ -40,28 +40,27 @@ const RegisterScreen = () => {
   const [yearsOfExperience, setYearsOfExperience] = useState("")
   const [vehicleImage, setVehicleImage] = useState(null)
 
+  const pickImage = async () => {
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
-const pickImage = async () => {
-  // Request permission
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== "granted") {
+      Alert.alert("Permission Required", "Please allow access to your photo library to upload a vehicle image.")
+      return
+    }
 
-  if (status !== "granted") {
-    Alert.alert("Permission Required", "Please allow access to your photo library to upload a vehicle image.")
-    return
+    // Launch image picker with updated API
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: [ImagePicker.MediaType.IMAGE],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    })
+
+    if (!result.canceled) {
+      setVehicleImage(result.assets[0])
+    }
   }
-
-  // Launch image picker - Fix the deprecated MediaTypeOptions
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaType.Images, // Changed from MediaTypeOptions to MediaType
-    allowsEditing: true,
-    aspect: [4, 3],
-    quality: 0.8,
-  })
-
-  if (!result.canceled) {
-    setVehicleImage(result.assets[0])
-  }
-}
 
   const handleRegister = async () => {
     // Validation

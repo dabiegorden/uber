@@ -1,15 +1,37 @@
-const express = require('express');
-const router = express.Router();
-const adminController = require('../controllers/adminController');
-const { isAuthenticated, isAdmin } = require('../middleware/authMiddleware');
+// Updated routes/adminRoutes.js
 
-// Admin dashboard stats
-router.get('/stats', isAuthenticated, isAdmin, adminController.getDashboardStats);
+const express = require("express")
+const router = express.Router()
+const adminController = require("../controllers/adminController")
+const { isAuthenticated, isAdmin } = require("../middleware/authMiddleware")
 
-// Recent rides
-router.get('/recent-rides', isAuthenticated, isAdmin, adminController.getRecentRides);
+// Apply admin middleware to all routes
+router.use(isAuthenticated, isAdmin)
 
-// All rides with pagination
-router.get('/rides', isAuthenticated, isAdmin, adminController.getAllRides);
+// Dashboard statistics
+router.get("/dashboard-stats", adminController.getDashboardStats)
 
-module.exports = router;
+// User CRUD operations
+router.get("/users", adminController.getAllUsers)
+router.get("/users/:id", adminController.getUserById)
+router.post("/users", adminController.createUser)
+router.put("/users/:id", adminController.updateUser)
+router.delete("/users/:id", adminController.deleteUser)
+
+// Driver CRUD operations
+router.get("/drivers", adminController.getAllDrivers)
+router.get("/drivers/:id", adminController.getDriverById)
+router.post("/drivers", adminController.createDriver)
+router.put("/drivers/:id", adminController.updateDriver)
+router.delete("/drivers/:id", adminController.deleteDriver)
+
+// Pending driver verifications
+router.get("/pending-drivers", adminController.getPendingDrivers)
+
+// Update driver verification status
+router.post("/verify-driver", adminController.updateDriverVerification)
+
+// Get all rides
+router.get("/rides", adminController.getAllRides)
+
+module.exports = router

@@ -1,94 +1,102 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  TouchableOpacity, 
+"use client"
+
+import { useState } from "react"
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Image,
-  Alert
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+  Alert,
+} from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
+import { router } from "expo-router"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
-import image4 from "@/assets/images/image4.png";
+import image4 from "@/assets/images/image4.png"
 
 // Set the base URL for all fetch requests
-const BASE_URL = 'http://192.168.137.183:8080';
+const BASE_URL = "http://192.168.0.100:8080"
 
 const LoginScreen = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
 
   const handleLogin = async () => {
     // Validation
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
-      return;
+      Alert.alert("Error", "Please enter both email and password")
+      return
     }
 
     try {
-      setLoading(true);
+      setLoading(true)
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           email,
-          password
+          password,
         }),
-        credentials: 'include'
-      });
+        credentials: "include",
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (response.ok && data.success) {
-        // Redirect based on user role
-        if (data.user.role === 'admin') {
-          router.push('/admin');
+        // Store user data in AsyncStorage for persistence
+        await AsyncStorage.setItem(
+          "userData",
+          JSON.stringify({
+            id: data.user.id,
+            email: data.user.email,
+            username: data.user.username,
+            role: data.user.role,
+          }),
+        )
+
+        // Use the redirectRoute from the server response
+        if (data.user.redirectRoute) {
+          router.replace(data.user.redirectRoute)
         } else {
-          router.push('/map');
+          // Fallback to role-based routing if redirectRoute is not provided
+          if (data.user.role === "admin") {
+            router.replace("/admin")
+          } else if (data.user.role === "driver") {
+            router.replace("/driver-dashboard")
+          } else {
+            router.replace("/map")
+          }
         }
       } else {
-        Alert.alert('Login Failed', data.message || 'Unable to log in');
+        Alert.alert("Login Failed", data.message || "Unable to log in")
       }
     } catch (error) {
-      console.error('Login error:', error);
-      Alert.alert(
-        'Login Failed',
-        'Unable to connect to server'
-      );
+      console.error("Login error:", error)
+      Alert.alert("Login Failed", "Unable to connect to server")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const handleForgotPassword = () => {
-    router.push('/forgot-password');
-  };
+    router.push("/forgot-password")
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : null}
-        className="flex-1"
-      >
-        <ScrollView 
-          contentContainerStyle={{ flexGrow: 1 }}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : null} className="flex-1">
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 justify-center px-8 py-10">
             <View className="items-center mb-8">
-              <Image 
-                source={image4} 
-                className="w-48 h-32"
-                resizeMode="contain"
-              />
+              <Image source={image4} className="w-48 h-32" resizeMode="contain" />
               <Text className="text-2xl font-bold mt-4 text-blue-600">Welcome Back</Text>
               <Text className="text-gray-500 mt-2">Log in to your account</Text>
             </View>
@@ -116,10 +124,7 @@ const LoginScreen = () => {
               />
             </View>
 
-            <TouchableOpacity 
-              className="items-end mb-6" 
-              onPress={handleForgotPassword}
-            >
+            <TouchableOpacity className="items-end mb-6" onPress={handleForgotPassword}>
               <Text className="text-blue-600">Forgot Password?</Text>
             </TouchableOpacity>
 
@@ -135,17 +140,14 @@ const LoginScreen = () => {
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              className="items-center" 
-              onPress={() => router.push('/register')}
-            >
+            <TouchableOpacity className="items-center" onPress={() => router.push("/register")}>
               <Text className="text-blue-600">Don't have an account? Sign Up</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-};
+  )
+}
 
-export default LoginScreen;
+export default LoginScreen

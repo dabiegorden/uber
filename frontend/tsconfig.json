@@ -14,5 +14,5 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "nativewind-env.d.ts"
-, "app/index.jsx", "app/(auth)/login.jsx", "app/(auth)/register.jsx", "constants/index.js", "app/(auth)/welcome.jsx", "app/(tabs)/home.jsx", "app/(tabs)/rides.jsx", "app/(tabs)/accounts.jsx", "app/(adminDashboard)/_layout.tsx"   ]
+, "app/index.jsx", "app/(auth)/login.jsx", "app/(auth)/register.jsx", "constants/index.js", "app/(auth)/welcome.jsx", "app/(tabs)/home.jsx", "app/(tabs)/rides.jsx", "app/(tabs)/accounts.jsx", "app/(adminDashboard)/_layout.tsx", "app/(screen)/driver-dashboard.jsx", "components/RideHistoryItem.jsx"   ]
 }

@@ -1,10 +1,27 @@
+// Update routes/auth.js
+
 const express = require('express');
 const router = express.Router();
 const authController = require("../controllers/authController");
 const { isAuthenticated, isAdmin } = require('../middleware/authMiddleware');
 
 // Public routes
-router.post('/register', authController.register);
+router.post('/register', (req, res, next) => {
+  // Get the upload middleware from app.locals
+  const upload = req.app.locals.upload;
+  
+  // Use single file upload for vehicle image
+  upload.single('vehicleImage')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({
+        success: false,
+        message: err.message
+      });
+    }
+    next();
+  });
+}, authController.register);
+
 router.post('/login', authController.login);
 router.get('/logout', authController.logout);
 

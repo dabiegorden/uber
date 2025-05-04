@@ -23,5 +23,9 @@ router.post("/update-status", isAuthenticated, rideController.updateRideStatus)
 
 // Route to get ride history
 router.get("/history/list", isAuthenticated, rideController.getRideHistory)
+// Get all available drivers
+router.get('/all-available-drivers', isAuthenticated, rideController.getAllAvailableDrivers);
+// Add this to rideRoutes.js
+router.post("/create", isAuthenticated, rideController.createRide)
 
 module.exports = router
