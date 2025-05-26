@@ -22,7 +22,7 @@ import BottomSheetComponent from "../../components/BottomSheetComponent"
 import { useStripe } from "@stripe/stripe-react-native"
 
 // Set the base URL for all fetch requests
-const BASE_URL = "http://192.168.0.100:8080"
+const BASE_URL = "http://192.168.137.5:8080"
 // Google Places API Key
 const GOOGLE_PLACES_API_KEY = "AIzaSyAqmJNttn7mi2WP30NgfpA60OjrfVGKlSE"
 

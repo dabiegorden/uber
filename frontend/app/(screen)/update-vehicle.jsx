@@ -18,7 +18,7 @@ import { router } from "expo-router"
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
 
-const BASE_URL = "http://192.168.0.0:8080"
+const BASE_URL = "http://192.168.137.5:8080"
 
 const UpdateVehicleScreen = () => {
   const [loading, setLoading] = useState(true)

@@ -21,7 +21,7 @@ import { Ionicons } from "@expo/vector-icons"
 
 import image1 from "@/assets/images/image1.png"
 
-const BASE_URL = "http://192.168.0.100:8080"
+const BASE_URL = "http://192.168.137.5:8080"
 
 const RegisterScreen = () => {
   const [username, setUsername] = useState("")

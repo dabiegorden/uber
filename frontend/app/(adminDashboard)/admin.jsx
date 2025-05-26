@@ -24,7 +24,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as ImagePicker from "expo-image-picker"
 
 
-const BASE_URL = "http://192.168.0.100:8080"
+const BASE_URL = "http://192.168.137.5:8080"
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)

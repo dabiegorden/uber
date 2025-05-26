@@ -17,7 +17,7 @@ import { router } from "expo-router"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons"
 
-const BASE_URL = "http://192.168.0.100:8080"
+const BASE_URL = "http://192.168.137.5:8080"
 
 // New component for ride history with payment tracking
 const RideHistoryItem = ({ ride }) => {

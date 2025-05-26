@@ -20,7 +20,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import image4 from "@/assets/images/image4.png"
 
 // Set the base URL for all fetch requests
-const BASE_URL = "http://192.168.0.100:8080"
+const BASE_URL = "http://192.168.137.5:8080"
 
 const LoginScreen = () => {
   const [email, setEmail] = useState("")
@@ -51,16 +51,29 @@ const LoginScreen = () => {
       const data = await response.json()
 
       if (response.ok && data.success) {
+        // Create a user data object to store in AsyncStorage
+        const userData = {
+          id: data.user.id,
+          email: data.user.email,
+          username: data.user.username,
+          role: data.user.role,
+        }
+
+        // If user is a driver and driverInfo is provided, store it as well
+        if (data.user.role === "driver" && data.user.driverInfo) {
+          userData.driverInfo = data.user.driverInfo
+        }
+
         // Store user data in AsyncStorage for persistence
-        await AsyncStorage.setItem(
-          "userData",
-          JSON.stringify({
-            id: data.user.id,
-            email: data.user.email,
-            username: data.user.username,
-            role: data.user.role,
-          }),
-        )
+        await AsyncStorage.setItem("userData", JSON.stringify(userData))
+
+        // Also store phone number in a separate field for easy access
+        // For drivers, phone number is in driverInfo, for regular users it's in user data
+        if (data.user.role === "driver" && data.user.driverInfo) {
+          await AsyncStorage.setItem("userPhone", data.user.driverInfo.phone_number || "")
+        } else {
+          await AsyncStorage.setItem("userPhone", data.user.phone_number || "")
+        }
 
         // Use the redirectRoute from the server response
         if (data.user.redirectRoute) {
