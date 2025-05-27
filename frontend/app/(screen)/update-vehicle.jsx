@@ -18,7 +18,7 @@ import { router } from "expo-router"
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
 
-const BASE_URL = "http://192.168.137.5:8080"
+const BASE_URL = "http://192.168.42.161:8080"
 
 const UpdateVehicleScreen = () => {
   const [loading, setLoading] = useState(true)
@@ -37,7 +37,7 @@ const UpdateVehicleScreen = () => {
     try {
       setLoading(true)
 
-      const response = await fetch(`${BASE_URL}/api/auth/driver-profile`, {
+      const response = await fetch(`${BASE_URL}/api/auth/profile`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -52,7 +52,7 @@ const UpdateVehicleScreen = () => {
       const data = await response.json()
 
       if (data.success) {
-        const driver = data.driver
+        const driver = data.user
         setVehicleModel(driver.vehicle_model || "")
         setVehicleColor(driver.vehicle_color || "")
         setVehiclePlate(driver.vehicle_plate || "")
@@ -70,7 +70,6 @@ const UpdateVehicleScreen = () => {
   }
 
   const pickImage = async () => {
-    // Request permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
     if (status !== "granted") {
@@ -78,9 +77,8 @@ const UpdateVehicleScreen = () => {
       return
     }
 
-    // Launch image picker with updated API
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: [ImagePicker.MediaType.IMAGE],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 0.8,
@@ -92,7 +90,6 @@ const UpdateVehicleScreen = () => {
   }
 
   const handleUpdate = async () => {
-    // Validation
     if (!vehicleModel || !vehicleColor || !vehiclePlate) {
       Alert.alert("Error", "Please fill in all required fields")
       return
@@ -101,13 +98,11 @@ const UpdateVehicleScreen = () => {
     try {
       setSubmitting(true)
 
-      // Create form data for multipart/form-data request (for image upload)
       const formData = new FormData()
       formData.append("vehicle_model", vehicleModel)
       formData.append("vehicle_color", vehicleColor)
       formData.append("vehicle_plate", vehiclePlate)
 
-      // Append vehicle image if selected
       if (vehicleImage) {
         const imageUri = vehicleImage.uri
         const filename = imageUri.split("/").pop()

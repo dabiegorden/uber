@@ -11,6 +11,7 @@ const RootLayout = () => {
        <Stack.Screen name="(map)" options={{headerShown: false}} />
        <Stack.Screen name="(tabs)" options={{headerShown: false}} />
        <Stack.Screen name="(adminDashboard)" options={{headerShown: false}} />
+       <Stack.Screen name="(driversDashboard)" options={{headerShown: false}} />
     </Stack>
   )
 }

@@ -1,38 +1,70 @@
-// Update routes/auth.js
+const express = require("express")
+const router = express.Router()
+const authController = require("../controllers/authController")
+const { isAuthenticated, isAdmin } = require("../middleware/authMiddleware")
 
-const express = require('express');
-const router = express.Router();
-const authController = require("../controllers/authController");
-const { isAuthenticated, isAdmin } = require('../middleware/authMiddleware');
+// Public routes - Registration
+router.post("/register/user", authController.registerUser)
 
-// Public routes
-router.post('/register', (req, res, next) => {
-  // Get the upload middleware from app.locals
-  const upload = req.app.locals.upload;
-  
-  // Use single file upload for vehicle image
-  upload.single('vehicleImage')(req, res, (err) => {
-    if (err) {
-      return res.status(400).json({
-        success: false,
-        message: err.message
-      });
+router.post(
+  "/register/driver",
+  (req, res, next) => {
+    const upload = req.app.locals.upload
+    upload.single("vehicleImage")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message,
+        })
+      }
+      next()
+    })
+  },
+  authController.registerDriver,
+)
+
+// Unified registration endpoint (for backward compatibility)
+router.post(
+  "/register",
+  (req, res, next) => {
+    const upload = req.app.locals.upload
+    upload.single("vehicleImage")(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message,
+        })
+      }
+      next()
+    })
+  },
+  (req, res) => {
+    // Route to appropriate registration based on request data
+    if (req.body.driver_license || req.body.vehicle_model) {
+      return authController.registerDriver(req, res)
+    } else {
+      return authController.registerUser(req, res)
     }
-    next();
-  });
-}, authController.register);
+  }
+)
 
-router.post('/login', authController.login);
-router.get('/logout', authController.logout);
+// Authentication routes
+router.post("/login", authController.login)
+router.get("/logout", authController.logout)
 
-// Protected routes
-router.get('/profile', isAuthenticated, authController.getProfile);
-router.get('/driver-profile', isAuthenticated, authController.getDriverProfile);
+// Protected routes - Profile management
+router.get("/profile", isAuthenticated, authController.getProfile)
 
-// Admin routes
-router.get('/users', isAuthenticated, isAdmin, authController.getUsersList);
-router.get('/drivers', isAuthenticated, isAdmin, authController.getDriversList);
-router.put('/users/status', isAuthenticated, isAdmin, authController.updateUserStatus);
-router.put('/drivers/verify', isAuthenticated, isAdmin, authController.verifyDriver);
+// Location update
+router.post("/update-location", isAuthenticated, authController.updateLocation)
 
-module.exports = router;
+// Health check route
+router.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Auth service is running",
+    timestamp: new Date().toISOString(),
+  })
+})
+
+module.exports = router

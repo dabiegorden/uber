@@ -1,25 +1,23 @@
-// Updated controllers/adminController.js
-
 const db = require("../config/database")
 
 const adminController = {
   // Get dashboard statistics
   getDashboardStats: async (req, res) => {
     try {
-      // Get verified drivers count (removed the is_active check)
+      // Get verified drivers count
       const [verifiedDriversResult] = await db.query(
-        "SELECT COUNT(*) as total FROM drivers d JOIN users u ON d.user_id = u.id WHERE d.license_verified = 1",
+        "SELECT COUNT(*) as total FROM drivers WHERE license_verified = 1"
       )
       const verifiedDrivers = verifiedDriversResult[0].total
 
       // Get pending verification drivers count
       const [pendingDriversResult] = await db.query(
-        "SELECT COUNT(*) as total FROM drivers d WHERE d.license_verified = 0",
+        "SELECT COUNT(*) as total FROM drivers WHERE license_verified = 0"
       )
       const pendingDrivers = pendingDriversResult[0].total
 
       // Get total users count
-      const [usersResult] = await db.query('SELECT COUNT(*) as total FROM users WHERE role = "user"')
+      const [usersResult] = await db.query('SELECT COUNT(*) as total FROM users')
       const totalUsers = usersResult[0].total
 
       // Get total completed rides
@@ -28,7 +26,7 @@ const adminController = {
 
       // Get total earnings
       const [earningsResult] = await db.query(
-        'SELECT SUM(fare) as total FROM rides WHERE status = "completed" AND payment_status = "paid"',
+        'SELECT SUM(fare) as total FROM rides WHERE status = "completed" AND payment_status = "paid"'
       )
       const totalEarnings = earningsResult[0].total || 0
 
@@ -39,8 +37,8 @@ const adminController = {
          u.username as user_name, d.username as driver_name
          FROM rides r
          LEFT JOIN users u ON r.user_id = u.id
-         LEFT JOIN users d ON r.driver_id = d.id
-         ORDER BY r.created_at DESC LIMIT 10`,
+         LEFT JOIN drivers d ON r.driver_id = d.id
+         ORDER BY r.created_at DESC LIMIT 10`
       )
 
       return res.status(200).json({
@@ -67,13 +65,11 @@ const adminController = {
   getPendingDrivers: async (req, res) => {
     try {
       const [drivers] = await db.query(
-        `SELECT d.user_id, d.license_verified, d.vehicle_model, d.vehicle_color, 
-         d.vehicle_plate, d.driver_license, d.vehicle_image, d.years_of_experience,
-         u.username, u.email, u.phone_number, u.created_at
-         FROM drivers d
-         JOIN users u ON d.user_id = u.id
-         WHERE d.license_verified = 0
-         ORDER BY u.created_at DESC`,
+        `SELECT id, username, email, phone_number, driver_license, vehicle_model, 
+         vehicle_color, vehicle_plate, vehicle_image, years_of_experience, created_at
+         FROM drivers
+         WHERE license_verified = 0
+         ORDER BY created_at DESC`
       )
 
       return res.status(200).json({
@@ -103,8 +99,8 @@ const adminController = {
 
       // Update driver verification status
       await db.query(
-        "UPDATE drivers SET license_verified = ? WHERE user_id = ?",
-        [approved ? 1 : 2, driverId], // 1 = verified, 2 = rejected
+        "UPDATE drivers SET license_verified = ? WHERE id = ?",
+        [approved ? 1 : 2, driverId] // 1 = verified, 2 = rejected
       )
 
       return res.status(200).json({
@@ -124,9 +120,9 @@ const adminController = {
   getAllUsers: async (req, res) => {
     try {
       const [users] = await db.query(
-        `SELECT id, username, email, phone_number, role, created_at 
+        `SELECT id, username, email, phone_number, created_at, is_active
          FROM users
-         ORDER BY created_at DESC`,
+         ORDER BY created_at DESC`
       )
 
       return res.status(200).json({
@@ -148,7 +144,7 @@ const adminController = {
       const userId = req.params.id;
       
       const [users] = await db.query(
-        `SELECT id, username, email, phone_number, role, created_at 
+        `SELECT id, username, email, phone_number, created_at, is_active
          FROM users
          WHERE id = ?`,
         [userId]
@@ -177,9 +173,8 @@ const adminController = {
   // Create a new user
   createUser: async (req, res) => {
     try {
-      const { username, email, phone_number, password, role } = req.body;
+      const { username, email, phone_number, password } = req.body;
       
-      // Validate required fields
       if (!username || !email || !password) {
         return res.status(400).json({
           success: false,
@@ -187,27 +182,26 @@ const adminController = {
         })
       }
 
-      // Check if user already exists
-      const [existingUsers] = await db.query(
-        "SELECT id FROM users WHERE email = ? OR username = ?",
-        [email, username]
-      )
+      // Check if user already exists in any table
+      const [existingUsers] = await db.query("SELECT email FROM users WHERE email = ? OR username = ?", [email, username])
+      const [existingDrivers] = await db.query("SELECT email FROM drivers WHERE email = ? OR username = ?", [email, username])
+      const [existingAdmins] = await db.query("SELECT email FROM admins WHERE email = ? OR username = ?", [email, username])
 
-      if (existingUsers.length > 0) {
+      if (existingUsers.length > 0 || existingDrivers.length > 0 || existingAdmins.length > 0) {
         return res.status(400).json({
           success: false,
           message: "User with this email or username already exists",
         })
       }
 
-      // Hash password (assuming you have a bcrypt utility)
+      // Hash password
       const bcrypt = require('bcrypt');
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Insert new user
       const [result] = await db.query(
-        "INSERT INTO users (username, email, phone_number, password, role) VALUES (?, ?, ?, ?, ?)",
-        [username, email, phone_number || null, hashedPassword, role || "user"]
+        "INSERT INTO users (username, email, phone_number, password) VALUES (?, ?, ?, ?)",
+        [username, email, phone_number || null, hashedPassword]
       )
 
       return res.status(201).json({
@@ -228,13 +222,10 @@ const adminController = {
   updateUser: async (req, res) => {
     try {
       const userId = req.params.id;
-      const { username, email, phone_number, role, password } = req.body;
+      const { username, email, phone_number, password } = req.body;
       
       // Check if user exists
-      const [existingUsers] = await db.query(
-        "SELECT id FROM users WHERE id = ?",
-        [userId]
-      )
+      const [existingUsers] = await db.query("SELECT id FROM users WHERE id = ?", [userId])
 
       if (existingUsers.length === 0) {
         return res.status(404).json({
@@ -243,7 +234,7 @@ const adminController = {
         })
       }
 
-      // Build update query dynamically based on provided fields
+      // Build update query dynamically
       let updateFields = [];
       let queryParams = [];
 
@@ -262,11 +253,6 @@ const adminController = {
         queryParams.push(phone_number);
       }
 
-      if (role) {
-        updateFields.push("role = ?");
-        queryParams.push(role);
-      }
-
       if (password) {
         const bcrypt = require('bcrypt');
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -281,14 +267,9 @@ const adminController = {
         })
       }
 
-      // Add userId to params array
       queryParams.push(userId);
 
-      // Execute update query
-      await db.query(
-        `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
-        queryParams
-      )
+      await db.query(`UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`, queryParams)
 
       return res.status(200).json({
         success: true,
@@ -309,10 +290,7 @@ const adminController = {
       const userId = req.params.id;
       
       // Check if user exists
-      const [existingUsers] = await db.query(
-        "SELECT id, role FROM users WHERE id = ?",
-        [userId]
-      )
+      const [existingUsers] = await db.query("SELECT id FROM users WHERE id = ?", [userId])
 
       if (existingUsers.length === 0) {
         return res.status(404).json({
@@ -321,13 +299,7 @@ const adminController = {
         })
       }
 
-      // Check if user is a driver
-      if (existingUsers[0].role === "driver") {
-        // Delete from drivers table first (foreign key constraint)
-        await db.query("DELETE FROM drivers WHERE user_id = ?", [userId]);
-      }
-
-      // Delete user
+      // Delete user (rides will be handled by foreign key constraints)
       await db.query("DELETE FROM users WHERE id = ?", [userId]);
 
       return res.status(200).json({
@@ -347,12 +319,11 @@ const adminController = {
   getAllDrivers: async (req, res) => {
     try {
       const [drivers] = await db.query(
-        `SELECT d.user_id, d.license_verified, d.vehicle_model, d.vehicle_color, 
-         d.vehicle_plate, d.driver_license, d.vehicle_image, d.years_of_experience,
-         d.available, u.username, u.email, u.phone_number, u.created_at
-         FROM drivers d
-         JOIN users u ON d.user_id = u.id
-         ORDER BY u.created_at DESC`,
+        `SELECT id, username, email, phone_number, driver_license, vehicle_model, 
+         vehicle_color, vehicle_plate, vehicle_image, years_of_experience, 
+         license_verified, available, is_active, created_at
+         FROM drivers
+         ORDER BY created_at DESC`
       )
 
       return res.status(200).json({
@@ -374,12 +345,11 @@ const adminController = {
       const driverId = req.params.id;
       
       const [drivers] = await db.query(
-        `SELECT d.user_id, d.license_verified, d.vehicle_model, d.vehicle_color, 
-         d.vehicle_plate, d.driver_license, d.vehicle_image, d.years_of_experience,
-         d.available, u.username, u.email, u.phone_number, u.created_at
-         FROM drivers d
-         JOIN users u ON d.user_id = u.id
-         WHERE d.user_id = ?`,
+        `SELECT id, username, email, phone_number, driver_license, vehicle_model, 
+         vehicle_color, vehicle_plate, vehicle_image, years_of_experience, 
+         license_verified, available, is_active, created_at
+         FROM drivers
+         WHERE id = ?`,
         [driverId]
       )
 
@@ -407,63 +377,55 @@ const adminController = {
   createDriver: async (req, res) => {
     try {
       const { 
-        username, 
-        email, 
-        phone_number, 
-        password,
-        vehicle_model,
-        vehicle_color,
-        vehicle_plate,
-        driver_license,
-        vehicle_image,
-        years_of_experience,
-        license_verified
+        username, email, phone_number, password,
+        vehicle_model, vehicle_color, vehicle_plate, driver_license,
+        vehicle_image, years_of_experience, license_verified
       } = req.body;
       
-      // Start a transaction
-      await db.query("START TRANSACTION");
-      
-      // Create user account first
+      if (!username || !email || !password || !driver_license || !vehicle_model || !vehicle_color || !vehicle_plate) {
+        return res.status(400).json({
+          success: false,
+          message: "All required fields must be provided",
+        })
+      }
+
+      // Check if email/username/license already exists
+      const [existingUsers] = await db.query("SELECT email FROM users WHERE email = ? OR username = ?", [email, username])
+      const [existingDrivers] = await db.query("SELECT email FROM drivers WHERE email = ? OR username = ? OR driver_license = ?", [email, username, driver_license])
+      const [existingAdmins] = await db.query("SELECT email FROM admins WHERE email = ? OR username = ?", [email, username])
+
+      if (existingUsers.length > 0 || existingDrivers.length > 0 || existingAdmins.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Email, username, or driver license already exists",
+        })
+      }
+
+      // Hash password
       const bcrypt = require('bcrypt');
       const hashedPassword = await bcrypt.hash(password, 10);
       
-      const [userResult] = await db.query(
-        "INSERT INTO users (username, email, phone_number, password, role) VALUES (?, ?, ?, ?, 'driver')",
-        [username, email, phone_number || null, hashedPassword]
-      );
-      
-      const userId = userResult.insertId;
-      
-      // Create driver record
-      await db.query(
-        `INSERT INTO drivers 
-         (user_id, vehicle_model, vehicle_color, vehicle_plate, driver_license, 
-          vehicle_image, years_of_experience, license_verified, available) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+      // Insert driver
+      const [result] = await db.query(
+        `INSERT INTO drivers (
+          username, email, phone_number, password, driver_license, 
+          vehicle_model, vehicle_color, vehicle_plate, vehicle_image, 
+          years_of_experience, license_verified, available
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         [
-          userId,
-          vehicle_model,
-          vehicle_color,
-          vehicle_plate,
-          driver_license,
-          vehicle_image,
-          years_of_experience || 0,
-          license_verified || 0
+          username, email, phone_number || null, hashedPassword, driver_license,
+          vehicle_model, vehicle_color, vehicle_plate, vehicle_image,
+          years_of_experience || 0, license_verified || 0
         ]
       );
-      
-      // Commit transaction
-      await db.query("COMMIT");
       
       return res.status(201).json({
         success: true,
         message: "Driver created successfully",
-        driverId: userId,
+        driverId: result.insertId,
       });
       
     } catch (error) {
-      // Rollback transaction on error
-      await db.query("ROLLBACK");
       console.error("Create driver error:", error);
       return res.status(500).json({
         success: false,
@@ -477,132 +439,96 @@ const adminController = {
     try {
       const driverId = req.params.id;
       const { 
-        username, 
-        email, 
-        phone_number,
-        vehicle_model,
-        vehicle_color,
-        vehicle_plate,
-        driver_license,
-        vehicle_image,
-        years_of_experience,
-        license_verified,
-        available,
-        password
+        username, email, phone_number, password,
+        vehicle_model, vehicle_color, vehicle_plate, driver_license,
+        vehicle_image, years_of_experience, license_verified, available
       } = req.body;
       
-      // Start transaction
-      await db.query("START TRANSACTION");
-      
       // Check if driver exists
-      const [drivers] = await db.query(
-        "SELECT user_id FROM drivers WHERE user_id = ?",
-        [driverId]
-      );
+      const [drivers] = await db.query("SELECT id FROM drivers WHERE id = ?", [driverId]);
       
       if (drivers.length === 0) {
-        await db.query("ROLLBACK");
         return res.status(404).json({
           success: false,
           message: "Driver not found",
         });
       }
       
-      // Update user information if provided
-      if (username || email || phone_number || password) {
-        let updateFields = [];
-        let queryParams = [];
-        
-        if (username) {
-          updateFields.push("username = ?");
-          queryParams.push(username);
-        }
-        
-        if (email) {
-          updateFields.push("email = ?");
-          queryParams.push(email);
-        }
-        
-        if (phone_number !== undefined) {
-          updateFields.push("phone_number = ?");
-          queryParams.push(phone_number);
-        }
-        
-        if (password) {
-          const bcrypt = require('bcrypt');
-          const hashedPassword = await bcrypt.hash(password, 10);
-          updateFields.push("password = ?");
-          queryParams.push(hashedPassword);
-        }
-        
-        if (updateFields.length > 0) {
-          queryParams.push(driverId);
-          await db.query(
-            `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
-            queryParams
-          );
-        }
+      // Build update query dynamically
+      let updateFields = [];
+      let queryParams = [];
+      
+      if (username) {
+        updateFields.push("username = ?");
+        queryParams.push(username);
       }
       
-      // Update driver information if provided
-      if (vehicle_model || vehicle_color || vehicle_plate || driver_license || 
-          vehicle_image !== undefined || years_of_experience !== undefined || 
-          license_verified !== undefined || available !== undefined) {
-        
-        let updateFields = [];
-        let queryParams = [];
-        
-        if (vehicle_model) {
-          updateFields.push("vehicle_model = ?");
-          queryParams.push(vehicle_model);
-        }
-        
-        if (vehicle_color) {
-          updateFields.push("vehicle_color = ?");
-          queryParams.push(vehicle_color);
-        }
-        
-        if (vehicle_plate) {
-          updateFields.push("vehicle_plate = ?");
-          queryParams.push(vehicle_plate);
-        }
-        
-        if (driver_license) {
-          updateFields.push("driver_license = ?");
-          queryParams.push(driver_license);
-        }
-        
-        if (vehicle_image !== undefined) {
-          updateFields.push("vehicle_image = ?");
-          queryParams.push(vehicle_image);
-        }
-        
-        if (years_of_experience !== undefined) {
-          updateFields.push("years_of_experience = ?");
-          queryParams.push(years_of_experience);
-        }
-        
-        if (license_verified !== undefined) {
-          updateFields.push("license_verified = ?");
-          queryParams.push(license_verified);
-        }
-        
-        if (available !== undefined) {
-          updateFields.push("available = ?");
-          queryParams.push(available);
-        }
-        
-        if (updateFields.length > 0) {
-          queryParams.push(driverId);
-          await db.query(
-            `UPDATE drivers SET ${updateFields.join(", ")} WHERE user_id = ?`,
-            queryParams
-          );
-        }
+      if (email) {
+        updateFields.push("email = ?");
+        queryParams.push(email);
       }
       
-      // Commit transaction
-      await db.query("COMMIT");
+      if (phone_number !== undefined) {
+        updateFields.push("phone_number = ?");
+        queryParams.push(phone_number);
+      }
+      
+      if (password) {
+        const bcrypt = require('bcrypt');
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updateFields.push("password = ?");
+        queryParams.push(hashedPassword);
+      }
+      
+      if (vehicle_model) {
+        updateFields.push("vehicle_model = ?");
+        queryParams.push(vehicle_model);
+      }
+      
+      if (vehicle_color) {
+        updateFields.push("vehicle_color = ?");
+        queryParams.push(vehicle_color);
+      }
+      
+      if (vehicle_plate) {
+        updateFields.push("vehicle_plate = ?");
+        queryParams.push(vehicle_plate);
+      }
+      
+      if (driver_license) {
+        updateFields.push("driver_license = ?");
+        queryParams.push(driver_license);
+      }
+      
+      if (vehicle_image !== undefined) {
+        updateFields.push("vehicle_image = ?");
+        queryParams.push(vehicle_image);
+      }
+      
+      if (years_of_experience !== undefined) {
+        updateFields.push("years_of_experience = ?");
+        queryParams.push(years_of_experience);
+      }
+      
+      if (license_verified !== undefined) {
+        updateFields.push("license_verified = ?");
+        queryParams.push(license_verified);
+      }
+      
+      if (available !== undefined) {
+        updateFields.push("available = ?");
+        queryParams.push(available);
+      }
+      
+      if (updateFields.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No fields to update",
+        });
+      }
+      
+      queryParams.push(driverId);
+      await db.query(`UPDATE drivers SET ${updateFields.join(", ")} WHERE id = ?`, queryParams);
       
       return res.status(200).json({
         success: true,
@@ -610,8 +536,6 @@ const adminController = {
       });
       
     } catch (error) {
-      // Rollback transaction on error
-      await db.query("ROLLBACK");
       console.error("Update driver error:", error);
       return res.status(500).json({
         success: false,
@@ -625,31 +549,18 @@ const adminController = {
     try {
       const driverId = req.params.id;
       
-      // Start transaction
-      await db.query("START TRANSACTION");
-      
       // Check if driver exists
-      const [drivers] = await db.query(
-        "SELECT user_id FROM drivers WHERE user_id = ?",
-        [driverId]
-      );
+      const [drivers] = await db.query("SELECT id FROM drivers WHERE id = ?", [driverId]);
       
       if (drivers.length === 0) {
-        await db.query("ROLLBACK");
         return res.status(404).json({
           success: false,
           message: "Driver not found",
         });
       }
       
-      // Delete driver record first
-      await db.query("DELETE FROM drivers WHERE user_id = ?", [driverId]);
-      
-      // Delete user record
-      await db.query("DELETE FROM users WHERE id = ?", [driverId]);
-      
-      // Commit transaction
-      await db.query("COMMIT");
+      // Delete driver (rides will be handled by foreign key constraints)
+      await db.query("DELETE FROM drivers WHERE id = ?", [driverId]);
       
       return res.status(200).json({
         success: true,
@@ -657,8 +568,6 @@ const adminController = {
       });
       
     } catch (error) {
-      // Rollback transaction on error
-      await db.query("ROLLBACK");
       console.error("Delete driver error:", error);
       return res.status(500).json({
         success: false,
@@ -676,8 +585,8 @@ const adminController = {
          u.username as user_name, d.username as driver_name
          FROM rides r
          LEFT JOIN users u ON r.user_id = u.id
-         LEFT JOIN users d ON r.driver_id = d.id
-         ORDER BY r.created_at DESC`,
+         LEFT JOIN drivers d ON r.driver_id = d.id
+         ORDER BY r.created_at DESC`
       )
 
       return res.status(200).json({

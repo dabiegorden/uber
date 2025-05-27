@@ -1,5 +1,3 @@
-// Update your server.js file to include multer for file uploads
-
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -15,6 +13,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const driverRoutes = require('./routes/driverRoutes'); // Add this
 const dotenv = require('dotenv');
 const authController = require('./controllers/authController');
+const bcrypt = require('bcrypt');
 dotenv.config();
 
 const app = express();
@@ -87,6 +86,8 @@ app.use((err, req, res, next) => {
     message: 'Internal server error'
   });
 });
+
+
 
 // Start server
 app.listen(process.env.PORT, () => {

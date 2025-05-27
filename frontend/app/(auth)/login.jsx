@@ -19,18 +19,26 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 
 import image4 from "@/assets/images/image4.png"
 
-// Set the base URL for all fetch requests
-const BASE_URL = "http://192.168.137.5:8080"
+const BASE_URL = "http://192.168.42.161:8080"
 
 const LoginScreen = () => {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
   const handleLogin = async () => {
-    // Validation
     if (!email || !password) {
       Alert.alert("Error", "Please enter both email and password")
+      return
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert("Error", "Please enter a valid email address")
       return
     }
 
@@ -42,7 +50,7 @@ const LoginScreen = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email,
+          email: email.toLowerCase().trim(),
           password,
         }),
         credentials: "include",
@@ -51,49 +59,61 @@ const LoginScreen = () => {
       const data = await response.json()
 
       if (response.ok && data.success) {
-        // Create a user data object to store in AsyncStorage
+        // Store user data with userType instead of role
         const userData = {
           id: data.user.id,
           email: data.user.email,
           username: data.user.username,
-          role: data.user.role,
+          userType: data.user.userType, // Updated to use userType from backend
         }
 
-        // If user is a driver and driverInfo is provided, store it as well
-        if (data.user.role === "driver" && data.user.driverInfo) {
-          userData.driverInfo = data.user.driverInfo
-        }
-
-        // Store user data in AsyncStorage for persistence
         await AsyncStorage.setItem("userData", JSON.stringify(userData))
 
-        // Also store phone number in a separate field for easy access
-        // For drivers, phone number is in driverInfo, for regular users it's in user data
-        if (data.user.role === "driver" && data.user.driverInfo) {
-          await AsyncStorage.setItem("userPhone", data.user.driverInfo.phone_number || "")
-        } else {
-          await AsyncStorage.setItem("userPhone", data.user.phone_number || "")
+        // Route based on userType
+        switch (data.user.userType) {
+          case "admin":
+            router.replace("/admin")
+            break
+          case "driver":
+            // Check driver verification status
+            if (data.user.license_verified === 0) {
+              Alert.alert(
+                "Account Pending Verification",
+                "Your driver account is pending verification. You'll be notified once approved.",
+                [{ text: "OK", onPress: () => router.replace("/driver-dashboard") }],
+              )
+            } else if (data.user.license_verified === 2) {
+              Alert.alert(
+                "Account Verification Failed",
+                "Your driver account verification was rejected. Please contact support.",
+                [{ text: "OK", onPress: () => router.replace("/driver-dashboard") }],
+              )
+            } else {
+              router.replace("/driver-dashboard")
+            }
+            break
+          case "user":
+          default:
+            router.replace("/map")
+            break
         }
 
-        // Use the redirectRoute from the server response
-        if (data.user.redirectRoute) {
-          router.replace(data.user.redirectRoute)
-        } else {
-          // Fallback to role-based routing if redirectRoute is not provided
-          if (data.user.role === "admin") {
-            router.replace("/admin")
-          } else if (data.user.role === "driver") {
-            router.replace("/driver-dashboard")
-          } else {
-            router.replace("/map")
-          }
-        }
+        Alert.alert("Login Successful", `Welcome back, ${data.user.username}!`)
       } else {
-        Alert.alert("Login Failed", data.message || "Unable to log in")
+        if (response.status === 401) {
+          Alert.alert("Login Failed", "Invalid email or password. Please try again.")
+        } else if (response.status === 403) {
+          Alert.alert("Account Issue", data.message || "Your account has an issue. Please contact support.")
+        } else {
+          Alert.alert("Login Failed", data.message || "Unable to log in. Please try again.")
+        }
       }
     } catch (error) {
       console.error("Login error:", error)
-      Alert.alert("Login Failed", "Unable to connect to server")
+      Alert.alert(
+        "Connection Error",
+        "Unable to connect to server. Please check your internet connection and try again.",
+      )
     } finally {
       setLoading(false)
     }
@@ -123,6 +143,7 @@ const LoginScreen = () => {
                 placeholder="Enter your email"
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
 
@@ -137,12 +158,8 @@ const LoginScreen = () => {
               />
             </View>
 
-            <TouchableOpacity className="items-end mb-6" onPress={handleForgotPassword}>
-              <Text className="text-blue-600">Forgot Password?</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
-              className="bg-blue-600 rounded-lg py-4 items-center mb-6"
+              className="bg-blue-600 rounded-lg py-4 mt-4 items-center mb-6"
               onPress={handleLogin}
               disabled={loading}
             >

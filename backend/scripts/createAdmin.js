@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 async function createAdmin() {
-  // Read admin credentials from environment variables or command line arguments
+  // Read admin credentials from environment variables
   const adminUsername = process.env.ADMIN_USERNAME
   const adminEmail = process.env.ADMIN_EMAIL
   const adminPassword = process.env.ADMIN_PASSWORD
@@ -12,27 +12,19 @@ async function createAdmin() {
   
   if (!adminUsername || !adminEmail || !adminPassword || !adminPhone) {
     console.error('Error: Admin username, email, phone number and password are required.');
-    console.log('Usage: node createAdmin.js <username> <email> <password> <phone>');
-    console.log('Or set ADMIN_USERNAME, ADMIN_EMAIL, and ADMIN_PASSWORD, ADMIN_PHONE environment variables.');
+    console.log('Usage: Set ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD, and ADMIN_PHONE environment variables.');
     process.exit(1);
   }
   
-  // Create database connection
-  const connection = await db.getConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
-  });
-  
   try {
-    // Check if admin already exists
-    const [existingAdmins] = await connection.query(
-      'SELECT * FROM users WHERE role = "admin"'
+    // Check if admin already exists in the admins table
+    const [existingAdmins] = await db.query(
+      'SELECT * FROM admins WHERE email = ?',
+      [adminEmail]
     );
     
     if (existingAdmins.length > 0) {
-      console.log('An admin user already exists. If you need to create another admin, use the application\'s admin interface.');
+      console.log('An admin user already exists with this email. If you need to create another admin, use a different email.');
       process.exit(0);
     }
     
@@ -40,24 +32,28 @@ async function createAdmin() {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(adminPassword, saltRounds);
     
-    // Insert admin user
-    const [result] = await connection.query(
-      'INSERT INTO users (username, email, password, phone_number, role) VALUES (?, ?, ?, ?, "admin")',
+    // Insert admin user into admins table
+    const [result] = await db.query(
+      'INSERT INTO admins (username, email, password, phone_number) VALUES (?, ?, ?, ?)',
       [adminUsername, adminEmail, hashedPassword, adminPhone]
     );
     
-    console.log(`Admin user created successfully with ID: ${result.insertId}`);
+    console.log(`✅ Admin user created successfully with ID: ${result.insertId}`);
+    console.log(`📧 Email: ${adminEmail}`);
+    console.log(`👤 Username: ${adminUsername}`);
+    console.log(`📱 Phone: ${adminPhone}`);
   } catch (error) {
-    console.error('Error creating admin user:', error);
-  } finally {
-    // Use release() instead of end() for pooled connections
-    await connection.release();
+    console.error('❌ Error creating admin user:', error.message);
+    process.exit(1);
   }
 }
 
 createAdmin()
-  .then(() => process.exit(0))
+  .then(() => {
+    console.log('🎉 Admin creation completed successfully!');
+    process.exit(0);
+  })
   .catch((err) => {
-    console.error('Unhandled error:', err);
+    console.error('💥 Unhandled error:', err);
     process.exit(1);
   });

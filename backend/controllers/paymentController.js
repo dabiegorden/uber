@@ -1,5 +1,3 @@
-// Update controllers/paymentController.js
-
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -85,7 +83,7 @@ const paymentController = {
         });
       }
 
-      // Get ride details to record driver earnings
+      // Get ride details
       const [rides] = await db.query(
         'SELECT * FROM rides WHERE id = ? AND payment_intent_id = ?',
         [rideId, paymentIntentId]
@@ -111,15 +109,22 @@ const paymentController = {
           [rideId, paymentIntentId]
         );
 
+        // Record payment
+        await connection.query(
+          `INSERT INTO payments (ride_id, user_id, driver_id, payment_intent_id, amount, status, driver_earnings) 
+           VALUES (?, ?, ?, ?, ?, 'succeeded', ?)`,
+          [rideId, ride.user_id, ride.driver_id, paymentIntentId, ride.fare, ride.fare * 0.8] // 80% to driver
+        );
+
         // Record driver earnings
         await connection.query(
-          'INSERT INTO driver_earnings (driver_id, ride_id, amount) VALUES (?, ?, ?)',
-          [ride.driver_id, rideId, ride.fare]
+          'INSERT INTO driver_earnings (driver_id, ride_id, payment_id, gross_amount, platform_fee, net_earnings) VALUES (?, ?, LAST_INSERT_ID(), ?, ?, ?)',
+          [ride.driver_id, rideId, ride.fare, ride.fare * 0.2, ride.fare * 0.8]
         );
 
         // Make driver available again
         await connection.query(
-          'UPDATE drivers SET available = 1 WHERE user_id = ?',
+          'UPDATE drivers SET available = 1 WHERE id = ?',
           [ride.driver_id]
         );
 
@@ -155,10 +160,12 @@ const paymentController = {
       }
 
       const userId = req.session.user.id;
+      const userType = req.session.user.userType;
 
-      // Get customer ID from database
+      // Get customer ID from appropriate table
+      const table = userType === 'driver' ? 'drivers' : 'users';
       const [users] = await db.query(
-        'SELECT stripe_customer_id FROM users WHERE id = ?',
+        `SELECT stripe_customer_id FROM ${table} WHERE id = ?`,
         [userId]
       );
 
@@ -201,34 +208,30 @@ const paymentController = {
       }
 
       const userId = req.session.user.id;
+      const userType = req.session.user.userType;
 
       // Get or create customer in Stripe
       let customerId;
+      const table = userType === 'driver' ? 'drivers' : 'users';
       const [users] = await db.query(
-        'SELECT stripe_customer_id FROM users WHERE id = ?',
+        `SELECT stripe_customer_id, email, username FROM ${table} WHERE id = ?`,
         [userId]
       );
 
       if (users.length > 0 && users[0].stripe_customer_id) {
         customerId = users[0].stripe_customer_id;
       } else {
-        // Get user details to create customer
-        const [userDetails] = await db.query(
-          'SELECT email, username FROM users WHERE id = ?',
-          [userId]
-        );
-
         // Create customer in Stripe
         const customer = await stripe.customers.create({
-          email: userDetails[0].email,
-          name: userDetails[0].username
+          email: users[0].email,
+          name: users[0].username
         });
 
         customerId = customer.id;
 
         // Save customer ID to database
         await db.query(
-          'UPDATE users SET stripe_customer_id = ? WHERE id = ?',
+          `UPDATE ${table} SET stripe_customer_id = ? WHERE id = ?`,
           [customerId, userId]
         );
       }

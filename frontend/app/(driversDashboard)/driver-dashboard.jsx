@@ -17,9 +17,8 @@ import { router } from "expo-router"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons"
 
-const BASE_URL = "http://192.168.137.5:8080"
+const BASE_URL = "http://192.168.42.161:8080"
 
-// New component for ride history with payment tracking
 const RideHistoryItem = ({ ride }) => {
   return (
     <View className="bg-white rounded-lg shadow-sm mb-3 p-4">
@@ -60,39 +59,16 @@ const RideHistoryItem = ({ ride }) => {
             }`}
           >
             <Text
-              className={`text-xs font-medium ${
-                ride.payment_status === "paid" ? "text-green-800" : "text-yellow-800"
-              }`}
+              className={`text-xs font-medium ${ride.payment_status === "paid" ? "text-green-800" : "text-yellow-800"}`}
             >
               {ride.payment_status ? ride.payment_status.toUpperCase() : "PENDING"}
             </Text>
           </View>
         </View>
       </View>
-
-      <View className="mt-3 pt-3 border-t border-gray-100">
-        <View className="flex-row">
-          <View className="w-1/2">
-            <Text className="text-gray-500 text-xs">PICKUP</Text>
-            <Text className="text-gray-700">
-              {`${Number.parseFloat(ride.pickup_latitude || 0).toFixed(4)}, ${Number.parseFloat(
-                ride.pickup_longitude || 0,
-              ).toFixed(4)}`}
-            </Text>
-          </View>
-          <View className="w-1/2">
-            <Text className="text-gray-500 text-xs">DROPOFF</Text>
-            <Text className="text-gray-700">
-              {`${Number.parseFloat(ride.dropoff_latitude || 0).toFixed(4)}, ${Number.parseFloat(
-                ride.dropoff_longitude || 0,
-              ).toFixed(4)}`}
-            </Text>
-          </View>
-        </View>
-      </View>
     </View>
-  );
-};
+  )
+}
 
 const DriverDashboard = () => {
   const [loading, setLoading] = useState(true)
@@ -106,7 +82,7 @@ const DriverDashboard = () => {
   })
   const [recentPayments, setRecentPayments] = useState([])
   const [isAvailable, setIsAvailable] = useState(false)
-  const [recentRides, setRecentRides] = useState([]) // Added state for recent rides
+  const [recentRides, setRecentRides] = useState([])
 
   useEffect(() => {
     loadDriverData()
@@ -117,7 +93,7 @@ const DriverDashboard = () => {
       setLoading(true)
 
       // Load driver profile
-      const profileResponse = await fetch(`${BASE_URL}/api/auth/driver-profile`, {
+      const profileResponse = await fetch(`${BASE_URL}/api/auth/profile`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -132,8 +108,8 @@ const DriverDashboard = () => {
       const profileData = await profileResponse.json()
 
       if (profileData.success) {
-        setDriverProfile(profileData.driver)
-        setIsAvailable(profileData.driver.available === 1)
+        setDriverProfile(profileData.user)
+        setIsAvailable(profileData.user.available === 1)
       }
 
       // Load earnings data
@@ -145,17 +121,14 @@ const DriverDashboard = () => {
         credentials: "include",
       })
 
-      if (!earningsResponse.ok) {
-        throw new Error("Failed to load earnings data")
+      if (earningsResponse.ok) {
+        const earningsData = await earningsResponse.json()
+        if (earningsData.success) {
+          setEarnings(earningsData.earnings)
+          setRecentPayments(earningsData.recentPayments)
+        }
       }
 
-      const earningsData = await earningsResponse.json()
-
-      if (earningsData.success) {
-        setEarnings(earningsData.earnings)
-        setRecentPayments(earningsData.recentPayments)
-      }
-      
       // Load recent rides data
       const ridesResponse = await fetch(`${BASE_URL}/api/drivers/recent-rides`, {
         method: "GET",
@@ -164,7 +137,7 @@ const DriverDashboard = () => {
         },
         credentials: "include",
       })
-      
+
       if (ridesResponse.ok) {
         const ridesData = await ridesResponse.json()
         if (ridesData.success) {
@@ -173,7 +146,12 @@ const DriverDashboard = () => {
       }
     } catch (error) {
       console.error("Error loading driver data:", error)
-      Alert.alert("Error", "Failed to load driver data. Please try again.")
+      if (error.message.includes("401")) {
+        Alert.alert("Session Expired", "Please login again")
+        router.replace("/login")
+      } else {
+        Alert.alert("Error", "Failed to load driver data. Please try again.")
+      }
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -221,10 +199,7 @@ const DriverDashboard = () => {
         credentials: "include",
       })
 
-      // Clear local storage
       await AsyncStorage.clear()
-
-      // Navigate to login
       router.replace("/login")
     } catch (error) {
       console.error("Logout error:", error)
@@ -254,7 +229,11 @@ const DriverDashboard = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      >
         {/* Header */}
         <View className="bg-blue-600 px-6 pt-6 pb-8">
           <View className="flex-row justify-between items-center mb-4">
@@ -415,14 +394,12 @@ const DriverDashboard = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Recent Rides - New section */}
-        <View className="bg-white mx-4 mt-4 mb-6 p-4 rounded-xl shadow-sm">
+        {/* Recent Rides */}
+        <View className="bg-white mx-4 mt-4 p-4 rounded-xl shadow-sm">
           <Text className="text-gray-800 font-bold text-lg mb-3">Recent Rides</Text>
 
           {recentRides.length > 0 ? (
-            recentRides.map((ride) => (
-              <RideHistoryItem key={ride.id} ride={ride} />
-            ))
+            recentRides.map((ride) => <RideHistoryItem key={ride.id} ride={ride} />)
           ) : (
             <View className="py-6 items-center">
               <MaterialCommunityIcons name="car-off" size={40} color="#d1d5db" />

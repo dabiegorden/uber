@@ -1,60 +1,53 @@
-// Create a new file: controllers/driverController.js
-
 const db = require("../config/database");
 const fs = require('fs');
 const path = require('path');
 
 const driverController = {
-// Add this to your controllers/driverController.js
-getRecentRides: async (req, res) => {
-  try {
-    if (!req.session || !req.session.user) {
-      return res.status(401).json({
+  // Get recent rides for driver
+  getRecentRides: async (req, res) => {
+    try {
+      if (!req.session || !req.session.user) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required"
+        });
+      }
+
+      const userId = req.session.user.id;
+      const userType = req.session.user.userType;
+
+      if (userType !== 'driver') {
+        return res.status(403).json({
+          success: false,
+          message: "Only drivers can access ride history"
+        });
+      }
+
+      // Get recent rides for this driver
+      const [rides] = await db.query(
+        `SELECT r.*, 
+          u.username as user_name,
+          DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i') as formatted_date
+        FROM rides r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.driver_id = ?
+        ORDER BY r.created_at DESC
+        LIMIT 10`,
+        [userId]
+      );
+
+      return res.status(200).json({
+        success: true,
+        rides: rides
+      });
+    } catch (error) {
+      console.error("Get recent rides error:", error);
+      return res.status(500).json({
         success: false,
-        message: "Authentication required"
+        message: "Server error fetching recent rides"
       });
     }
-
-    const userId = req.session.user.id;
-
-    // Check if user is a driver
-    const [drivers] = await db.query(
-      "SELECT * FROM drivers WHERE user_id = ?",
-      [userId]
-    );
-
-    if (drivers.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: "Only drivers can access ride history"
-      });
-    }
-
-    // Get recent rides for this driver
-    const [rides] = await db.query(
-      `SELECT r.*, 
-        u.username as user_name,
-        DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i') as formatted_date
-      FROM rides r
-      JOIN users u ON r.user_id = u.id
-      WHERE r.driver_id = ?
-      ORDER BY r.created_at DESC
-      LIMIT 10`,
-      [userId]
-    );
-
-    return res.status(200).json({
-      success: true,
-      rides: rides
-    });
-  } catch (error) {
-    console.error("Get recent rides error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error fetching recent rides"
-    });
-  }
-},
+  },
 
   // Get driver earnings
   getEarnings: async (req, res) => {
@@ -67,14 +60,9 @@ getRecentRides: async (req, res) => {
       }
 
       const userId = req.session.user.id;
+      const userType = req.session.user.userType;
 
-      // Check if user is a driver
-      const [drivers] = await db.query(
-        "SELECT * FROM drivers WHERE user_id = ?",
-        [userId]
-      );
-
-      if (drivers.length === 0) {
+      if (userType !== 'driver') {
         return res.status(403).json({
           success: false,
           message: "Only drivers can access earnings"
@@ -161,12 +149,9 @@ getRecentRides: async (req, res) => {
         });
       }
       
-      // Get driver details
+      // Get driver details from drivers table directly
       const [drivers] = await db.query(
-        `SELECT d.*, u.username, u.email, u.phone_number, u.latitude, u.longitude  
-         FROM drivers d 
-         JOIN users u ON d.user_id = u.id 
-         WHERE u.id = ?`,
+        `SELECT * FROM drivers WHERE id = ?`,
         [id]
       );
       
@@ -177,9 +162,12 @@ getRecentRides: async (req, res) => {
         });
       }
       
+      // Remove password from response
+      const { password, ...driverData } = drivers[0];
+      
       return res.status(200).json({
         success: true,
-        driver: drivers[0]
+        driver: driverData
       });
     } catch (error) {
       console.error("Get driver error:", error);
@@ -201,17 +189,22 @@ getRecentRides: async (req, res) => {
       }
 
       const userId = req.session.user.id;
+      const userType = req.session.user.userType;
 
-      // Check if user is a driver
-      const [drivers] = await db.query(
-        "SELECT * FROM drivers WHERE user_id = ?",
-        [userId]
-      );
-
-      if (drivers.length === 0) {
+      if (userType !== 'driver') {
         return res.status(403).json({
           success: false,
           message: "Only drivers can update driver profile"
+        });
+      }
+
+      // Get current driver data
+      const [drivers] = await db.query("SELECT * FROM drivers WHERE id = ?", [userId]);
+
+      if (drivers.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Driver not found"
         });
       }
 
@@ -227,36 +220,50 @@ getRecentRides: async (req, res) => {
 
         // Update vehicle image
         await db.query(
-          "UPDATE drivers SET vehicle_image = ? WHERE user_id = ?",
+          "UPDATE drivers SET vehicle_image = ? WHERE id = ?",
           [`/uploads/vehicles/${req.file.filename}`, userId]
         );
       }
 
       // Update other driver details if provided
-      const { vehicle_model, vehicle_color, vehicle_plate } = req.body;
-      if (vehicle_model || vehicle_color || vehicle_plate) {
-        let updateQuery = "UPDATE drivers SET ";
-        const updateValues = [];
-        const updateFields = [];
+      const { vehicle_model, vehicle_color, vehicle_plate, username, email, phone_number } = req.body;
+      
+      let updateFields = [];
+      let updateValues = [];
 
-        if (vehicle_model) {
-          updateFields.push("vehicle_model = ?");
-          updateValues.push(vehicle_model);
-        }
+      if (username) {
+        updateFields.push("username = ?");
+        updateValues.push(username);
+      }
 
-        if (vehicle_color) {
-          updateFields.push("vehicle_color = ?");
-          updateValues.push(vehicle_color);
-        }
+      if (email) {
+        updateFields.push("email = ?");
+        updateValues.push(email);
+      }
 
-        if (vehicle_plate) {
-          updateFields.push("vehicle_plate = ?");
-          updateValues.push(vehicle_plate);
-        }
+      if (phone_number !== undefined) {
+        updateFields.push("phone_number = ?");
+        updateValues.push(phone_number);
+      }
 
-        updateQuery += updateFields.join(", ") + " WHERE user_id = ?";
+      if (vehicle_model) {
+        updateFields.push("vehicle_model = ?");
+        updateValues.push(vehicle_model);
+      }
+
+      if (vehicle_color) {
+        updateFields.push("vehicle_color = ?");
+        updateValues.push(vehicle_color);
+      }
+
+      if (vehicle_plate) {
+        updateFields.push("vehicle_plate = ?");
+        updateValues.push(vehicle_plate);
+      }
+
+      if (updateFields.length > 0) {
+        const updateQuery = `UPDATE drivers SET ${updateFields.join(", ")} WHERE id = ?`;
         updateValues.push(userId);
-
         await db.query(updateQuery, updateValues);
       }
 
@@ -286,14 +293,9 @@ getRecentRides: async (req, res) => {
       }
 
       const userId = req.session.user.id;
+      const userType = req.session.user.userType;
 
-      // Check if user is a driver
-      const [drivers] = await db.query(
-        "SELECT * FROM drivers WHERE user_id = ?",
-        [userId]
-      );
-
-      if (drivers.length === 0) {
+      if (userType !== 'driver') {
         return res.status(403).json({
           success: false,
           message: "Only drivers can update availability"
@@ -302,7 +304,7 @@ getRecentRides: async (req, res) => {
 
       // Update availability
       await db.query(
-        "UPDATE drivers SET available = ? WHERE user_id = ?",
+        "UPDATE drivers SET available = ? WHERE id = ?",
         [available ? 1 : 0, userId]
       );
 
