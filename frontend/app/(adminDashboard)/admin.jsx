@@ -20,8 +20,9 @@ import { router } from "expo-router"
 import axios from "axios"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as ImagePicker from "expo-image-picker"
+import Constants from "expo-constants"
 
-const BASE_URL = "http://192.168.42.161:8080"
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL;
 
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
@@ -68,6 +69,7 @@ export default function AdminDashboard() {
     email: "",
     phone_number: "",
     password: "",
+    location: "", // Added location field
     vehicle_model: "",
     vehicle_color: "",
     vehicle_plate: "",
@@ -98,6 +100,8 @@ export default function AdminDashboard() {
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
+      console.log("Fetching dashboard data from:", BASE_URL)
+
       // Fetch dashboard stats
       const statsResponse = await axios.get(`${BASE_URL}/api/admin/dashboard-stats`, {
         withCredentials: true,
@@ -121,6 +125,14 @@ export default function AdminDashboard() {
       // Fetch all rides
       const ridesResponse = await axios.get(`${BASE_URL}/api/admin/rides`, {
         withCredentials: true,
+      })
+
+      console.log("API responses:", {
+        stats: statsResponse.data,
+        drivers: driversResponse.data,
+        pendingDrivers: pendingDriversResponse.data,
+        users: usersResponse.data,
+        rides: ridesResponse.data,
       })
 
       if (statsResponse.data.success) {
@@ -236,6 +248,8 @@ export default function AdminDashboard() {
         return
       }
 
+      console.log("Creating user:", userForm)
+
       const response = await axios.post(`${BASE_URL}/api/admin/users`, userForm, { withCredentials: true })
 
       if (response.data.success) {
@@ -263,6 +277,8 @@ export default function AdminDashboard() {
       if (!updateData.password) {
         delete updateData.password // Don't update password if empty
       }
+
+      console.log("Updating user:", updateData)
 
       const response = await axios.put(`${BASE_URL}/api/admin/users/${userForm.id}`, updateData, {
         withCredentials: true,
@@ -316,36 +332,40 @@ export default function AdminDashboard() {
     }
   }
 
-  // CRUD Operations for Drivers - FIXED
+  // CRUD Operations for Drivers - Updated with location field
   const createDriver = async () => {
     try {
       if (
         !driverForm.username ||
         !driverForm.email ||
         !driverForm.password ||
+        !driverForm.location || // Added location validation
         !driverForm.vehicle_model ||
         !driverForm.vehicle_color ||
         !driverForm.vehicle_plate ||
         !driverForm.driver_license
       ) {
-        Alert.alert("Error", "Please fill all required fields")
+        Alert.alert("Error", "Please fill all required fields including location")
         return
       }
 
       // Use regular JSON for driver creation, not FormData
       const driverData = {
-        username: driverForm.username,
-        email: driverForm.email,
+        username: driverForm.username.trim(),
+        email: driverForm.email.trim(),
         password: driverForm.password,
-        phone_number: driverForm.phone_number || "",
-        vehicle_model: driverForm.vehicle_model,
-        vehicle_color: driverForm.vehicle_color,
-        vehicle_plate: driverForm.vehicle_plate,
-        driver_license: driverForm.driver_license,
+        phone_number: driverForm.phone_number?.trim() || "",
+        location: driverForm.location.trim(), // Added location field
+        vehicle_model: driverForm.vehicle_model.trim(),
+        vehicle_color: driverForm.vehicle_color.trim(),
+        vehicle_plate: driverForm.vehicle_plate.trim(),
+        driver_license: driverForm.driver_license.trim(),
         years_of_experience: Number.parseInt(driverForm.years_of_experience) || 0,
         license_verified: driverForm.license_verified,
         available: driverForm.available,
       }
+
+      console.log("Creating driver:", driverData)
 
       const response = await axios.post(`${BASE_URL}/api/admin/drivers`, driverData, {
         headers: {
@@ -378,20 +398,23 @@ export default function AdminDashboard() {
       // Prepare update data - only include fields that have values
       const updateData = {}
 
-      if (driverForm.username) updateData.username = driverForm.username
-      if (driverForm.email) updateData.email = driverForm.email
-      if (driverForm.phone_number) updateData.phone_number = driverForm.phone_number
+      if (driverForm.username) updateData.username = driverForm.username.trim()
+      if (driverForm.email) updateData.email = driverForm.email.trim()
+      if (driverForm.phone_number) updateData.phone_number = driverForm.phone_number.trim()
       if (driverForm.password) updateData.password = driverForm.password
-      if (driverForm.vehicle_model) updateData.vehicle_model = driverForm.vehicle_model
-      if (driverForm.vehicle_color) updateData.vehicle_color = driverForm.vehicle_color
-      if (driverForm.vehicle_plate) updateData.vehicle_plate = driverForm.vehicle_plate
-      if (driverForm.driver_license) updateData.driver_license = driverForm.driver_license
+      if (driverForm.location) updateData.location = driverForm.location.trim() // Added location field
+      if (driverForm.vehicle_model) updateData.vehicle_model = driverForm.vehicle_model.trim()
+      if (driverForm.vehicle_color) updateData.vehicle_color = driverForm.vehicle_color.trim()
+      if (driverForm.vehicle_plate) updateData.vehicle_plate = driverForm.vehicle_plate.trim()
+      if (driverForm.driver_license) updateData.driver_license = driverForm.driver_license.trim()
       if (driverForm.years_of_experience)
         updateData.years_of_experience = Number.parseInt(driverForm.years_of_experience) || 0
 
       // Always include these as they can be 0/1
       updateData.license_verified = driverForm.license_verified
       updateData.available = driverForm.available
+
+      console.log("Updating driver:", updateData)
 
       const response = await axios.put(`${BASE_URL}/api/admin/drivers/${driverForm.id}`, updateData, {
         headers: {
@@ -466,6 +489,7 @@ export default function AdminDashboard() {
       email: "",
       phone_number: "",
       password: "",
+      location: "", // Added location field
       vehicle_model: "",
       vehicle_color: "",
       vehicle_plate: "",
@@ -496,6 +520,7 @@ export default function AdminDashboard() {
       email: driver.email,
       phone_number: driver.phone_number || "",
       password: "",
+      location: driver.location || "", // Added location field
       vehicle_model: driver.vehicle_model || "",
       vehicle_color: driver.vehicle_color || "",
       vehicle_plate: driver.vehicle_plate || "",
@@ -561,7 +586,7 @@ export default function AdminDashboard() {
         {renderStatCard(
           <FontAwesome name="money" size={24} color="#EF4444" />,
           "Total Earnings",
-          `$${(stats.totalEarnings || 0).toFixed(2)}`,
+          `₵${(stats.totalEarnings || 0).toFixed(2)}`,
           "red",
         )}
       </View>
@@ -584,6 +609,8 @@ export default function AdminDashboard() {
                     <Text className="text-gray-500 text-sm">
                       {driver.vehicle_model} • {driver.vehicle_plate}
                     </Text>
+                    {/* Display location */}
+                    <Text className="text-gray-500 text-sm">Location: {driver.location || "Not specified"}</Text>
                   </View>
                   <View className="flex-row">
                     <TouchableOpacity
@@ -627,10 +654,13 @@ export default function AdminDashboard() {
                     <Text className="font-semibold">
                       {ride.user_name || "User"} → {ride.driver_name || "Driver"}
                     </Text>
+                    {/* Display pickup and dropoff locations */}
+                    <Text className="text-gray-500 text-sm mt-1">From: {ride.pickup_location || "Unknown"}</Text>
+                    <Text className="text-gray-500 text-sm">To: {ride.dropoff_location || "Unknown"}</Text>
                     <Text className="text-gray-500 text-sm mt-1">{new Date(ride.created_at).toLocaleString()}</Text>
                   </View>
                   <View className="items-end">
-                    <Text className="font-bold">${Number.parseFloat(ride.fare || 0).toFixed(2)}</Text>
+                    <Text className="font-bold">₵{Number.parseFloat(ride.fare || 0).toFixed(2)}</Text>
                     <View
                       className={`px-2 py-1 rounded-full mt-1 ${
                         ride.status === "completed"
@@ -673,7 +703,8 @@ export default function AdminDashboard() {
       (driver) =>
         driver.username?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         driver.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        driver.vehicle_plate?.toLowerCase().includes(searchQuery.toLowerCase()),
+        driver.vehicle_plate?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        driver.location?.toLowerCase().includes(searchQuery.toLowerCase()), // Added location search
     )
 
     return (
@@ -681,7 +712,7 @@ export default function AdminDashboard() {
         <View className="flex-row items-center mb-4">
           <TextInput
             className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-2"
-            placeholder="Search drivers..."
+            placeholder="Search drivers by name, email, plate, or location..."
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -718,6 +749,10 @@ export default function AdminDashboard() {
                     <Text className="text-gray-500">{driver.email}</Text>
                     <Text className="text-gray-500 mt-1">
                       {driver.vehicle_model} • {driver.vehicle_color} • {driver.vehicle_plate}
+                    </Text>
+                    {/* Display location */}
+                    <Text className="text-gray-500 mt-1">
+                      <Text className="font-medium">Location:</Text> {driver.location || "Not specified"}
                     </Text>
                   </View>
                   <View className="items-end">
@@ -869,10 +904,17 @@ export default function AdminDashboard() {
                     <Text className="text-gray-700">
                       <Text className="font-semibold">Driver:</Text> {ride.driver_name || "Unknown"}
                     </Text>
+                    {/* Display pickup and dropoff locations */}
+                    <Text className="text-gray-500 text-sm mt-1">
+                      <Text className="font-semibold">From:</Text> {ride.pickup_location || "Unknown"}
+                    </Text>
+                    <Text className="text-gray-500 text-sm">
+                      <Text className="font-semibold">To:</Text> {ride.dropoff_location || "Unknown"}
+                    </Text>
                     <Text className="text-gray-500 text-sm mt-1">{new Date(ride.created_at).toLocaleString()}</Text>
                   </View>
                   <View className="items-end">
-                    <Text className="font-bold text-lg">${Number.parseFloat(ride.fare || 0).toFixed(2)}</Text>
+                    <Text className="font-bold text-lg">₵{Number.parseFloat(ride.fare || 0).toFixed(2)}</Text>
                     <View
                       className={`px-3 py-1 rounded-full mt-1 ${
                         ride.status === "completed"
@@ -978,7 +1020,7 @@ export default function AdminDashboard() {
     </Modal>
   )
 
-  // Render Driver Form Modal - FIXED
+  // Render Driver Form Modal - Updated with location field
   const renderDriverFormModal = () => (
     <Modal visible={showDriverFormModal} transparent={true} animationType="slide">
       <View className="flex-1 bg-black bg-opacity-50 justify-center items-center p-4">
@@ -1033,6 +1075,17 @@ export default function AdminDashboard() {
                 onChangeText={(text) => setDriverForm({ ...driverForm, password: text })}
                 placeholder="Enter password"
                 secureTextEntry
+              />
+            </View>
+
+            {/* NEW: Location Field */}
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2">Location *</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-3"
+                value={driverForm.location}
+                onChangeText={(text) => setDriverForm({ ...driverForm, location: text })}
+                placeholder="Enter driver's location (e.g., New York, NY)"
               />
             </View>
 
@@ -1181,7 +1234,7 @@ export default function AdminDashboard() {
     </Modal>
   )
 
-  // Render Driver Details Modal
+  // Render Driver Details Modal - Updated for location field
   const renderDriverModal = () => (
     <Modal visible={showDriverModal} transparent={true} animationType="slide">
       <View className="flex-1 bg-black bg-opacity-50 justify-center items-center p-4">
@@ -1207,6 +1260,11 @@ export default function AdminDashboard() {
                 <View className="mb-3">
                   <Text className="text-gray-500">Phone</Text>
                   <Text className="text-lg font-medium">{selectedDriver.phone_number || "N/A"}</Text>
+                </View>
+                {/* Display location */}
+                <View className="mb-3">
+                  <Text className="text-gray-500">Location</Text>
+                  <Text className="text-lg font-medium">{selectedDriver.location || "Not specified"}</Text>
                 </View>
                 <View className="mb-3">
                   <Text className="text-gray-500">Vehicle Model</Text>

@@ -7,7 +7,9 @@ import { Ionicons } from "@expo/vector-icons"
 import { router } from "expo-router"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
-const BASE_URL = "http://192.168.42.161:8080"
+import Constants from "expo-constants"
+
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL;
 
 export default function AccountScreen() {
   const [userData, setUserData] = useState(null)
@@ -77,7 +79,7 @@ export default function AccountScreen() {
   }
 
   const navigateToRideHistory = () => {
-    router.push("/ride-history")
+    router.push("/rides")
   }
 
   const navigateToEarnings = () => {
@@ -93,11 +95,11 @@ export default function AccountScreen() {
   }
 
   const navigateToPaymentMethods = () => {
-    router.push("/payment-methods")
+    Alert.alert("Coming Soon", "Payment methods feature will be available soon!")
   }
 
   const navigateToSupport = () => {
-    router.push("/support")
+    Alert.alert("Support", "For support, please contact us at support@rideshare.com")
   }
 
   if (loading) {
@@ -154,9 +156,6 @@ export default function AccountScreen() {
                       </View>
                     )}
                   </View>
-                  <TouchableOpacity className="mt-2">
-                    <Text className="text-blue-600">Edit Profile</Text>
-                  </TouchableOpacity>
                 </View>
               </View>
             </View>
@@ -170,6 +169,11 @@ export default function AccountScreen() {
                 <View className="flex-row justify-between mb-1">
                   <Text className="text-gray-500">License</Text>
                   <Text className="text-gray-800">{userData.driver_license}</Text>
+                </View>
+                {/* Display location */}
+                <View className="flex-row justify-between mb-1">
+                  <Text className="text-gray-500">Location</Text>
+                  <Text className="text-gray-800">{userData.location || "Not specified"}</Text>
                 </View>
                 <View className="flex-row justify-between mb-1">
                   <Text className="text-gray-500">Vehicle</Text>
@@ -211,15 +215,6 @@ export default function AccountScreen() {
 
           {/* Menu Options */}
           <View className="bg-white rounded-xl shadow-sm mb-4">
-            {/* Payment Methods */}
-            <TouchableOpacity
-              className="p-4 border-b border-gray-100 flex-row items-center"
-              onPress={navigateToPaymentMethods}
-            >
-              <Ionicons name="card-outline" size={24} color="#333" className="mr-3" />
-              <Text className="flex-1 text-gray-800 text-base">Payment Methods</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </TouchableOpacity>
 
             {/* Ride History */}
             <TouchableOpacity
@@ -227,7 +222,7 @@ export default function AccountScreen() {
               onPress={navigateToRideHistory}
             >
               <Ionicons name="time-outline" size={24} color="#333" className="mr-3" />
-              <Text className="flex-1 text-gray-800 text-base">Ride History</Text>
+              <Text  className="flex-1 text-gray-800 text-base">Ride History</Text>
               <Ionicons name="chevron-forward" size={20} color="#ccc" />
             </TouchableOpacity>
 
@@ -253,20 +248,6 @@ export default function AccountScreen() {
                 </TouchableOpacity>
               </>
             )}
-
-            {/* Promotions */}
-            <TouchableOpacity className="p-4 border-b border-gray-100 flex-row items-center">
-              <Ionicons name="gift-outline" size={24} color="#333" className="mr-3" />
-              <Text className="flex-1 text-gray-800 text-base">Promotions</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </TouchableOpacity>
-
-            {/* Help & Support */}
-            <TouchableOpacity className="p-4 flex-row items-center" onPress={navigateToSupport}>
-              <Ionicons name="help-circle-outline" size={24} color="#333" className="mr-3" />
-              <Text className="flex-1 text-gray-800 text-base">Help & Support</Text>
-              <Ionicons name="chevron-forward" size={20} color="#ccc" />
-            </TouchableOpacity>
           </View>
 
           {/* Sign Out */}

@@ -18,11 +18,14 @@ import { router } from "expo-router"
 import * as ImagePicker from "expo-image-picker"
 import { Ionicons } from "@expo/vector-icons"
 
-const BASE_URL = "http://192.168.42.161:8080"
+import Constants from "expo-constants"
+
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL;
 
 const UpdateVehicleScreen = () => {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [location, setLocation] = useState("") // Added location field
   const [vehicleModel, setVehicleModel] = useState("")
   const [vehicleColor, setVehicleColor] = useState("")
   const [vehiclePlate, setVehiclePlate] = useState("")
@@ -53,6 +56,7 @@ const UpdateVehicleScreen = () => {
 
       if (data.success) {
         const driver = data.user
+        setLocation(driver.location || "") // Added location field
         setVehicleModel(driver.vehicle_model || "")
         setVehicleColor(driver.vehicle_color || "")
         setVehiclePlate(driver.vehicle_plate || "")
@@ -90,38 +94,29 @@ const UpdateVehicleScreen = () => {
   }
 
   const handleUpdate = async () => {
-    if (!vehicleModel || !vehicleColor || !vehiclePlate) {
-      Alert.alert("Error", "Please fill in all required fields")
+    if (!location || !vehicleModel || !vehicleColor || !vehiclePlate) {
+      Alert.alert("Error", "Please fill in all required fields including location")
       return
     }
 
     try {
       setSubmitting(true)
 
-      const formData = new FormData()
-      formData.append("vehicle_model", vehicleModel)
-      formData.append("vehicle_color", vehicleColor)
-      formData.append("vehicle_plate", vehiclePlate)
-
-      if (vehicleImage) {
-        const imageUri = vehicleImage.uri
-        const filename = imageUri.split("/").pop()
-        const match = /\.(\w+)$/.exec(filename)
-        const type = match ? `image/${match[1]}` : "image"
-
-        formData.append("vehicleImage", {
-          uri: imageUri,
-          name: filename,
-          type,
-        })
+      // Try to use the admin drivers endpoint for updates
+      const updateData = {
+        location: location.trim(), // Added location field
+        vehicle_model: vehicleModel.trim(),
+        vehicle_color: vehicleColor.trim(),
+        vehicle_plate: vehiclePlate.trim(),
       }
 
+      // For now, use JSON instead of FormData for simplicity
       const response = await fetch(`${BASE_URL}/api/drivers/profile`, {
         method: "PUT",
         headers: {
-          "Content-Type": "multipart/form-data",
+          "Content-Type": "application/json",
         },
-        body: formData,
+        body: JSON.stringify(updateData),
         credentials: "include",
       })
 
@@ -135,7 +130,30 @@ const UpdateVehicleScreen = () => {
           },
         ])
       } else {
-        Alert.alert("Update Failed", data.message || "Failed to update vehicle information")
+        // If the drivers endpoint doesn't exist, try a generic profile update
+        console.log("Drivers endpoint failed, trying alternative...")
+
+        const fallbackResponse = await fetch(`${BASE_URL}/api/auth/profile`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updateData),
+          credentials: "include",
+        })
+
+        const fallbackData = await fallbackResponse.json()
+
+        if (fallbackResponse.ok && fallbackData.success) {
+          Alert.alert("Update Successful", "Your vehicle information has been updated successfully.", [
+            {
+              text: "OK",
+              onPress: () => router.back(),
+            },
+          ])
+        } else {
+          Alert.alert("Update Failed", fallbackData.message || data.message || "Failed to update vehicle information")
+        }
       }
     } catch (error) {
       console.error("Update error:", error)
@@ -193,6 +211,18 @@ const UpdateVehicleScreen = () => {
                 )}
               </TouchableOpacity>
               <Text className="text-gray-500 text-xs mt-1">Tap to change image</Text>
+            </View>
+
+            {/* NEW: Location Field */}
+            <View className="mb-4">
+              <Text className="text-gray-700 mb-2 font-medium">Location *</Text>
+              <TextInput
+                className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Enter your location (e.g., New York, NY)"
+              />
+              <Text className="text-gray-500 text-xs mt-1">This helps passengers find drivers in their area</Text>
             </View>
 
             <View className="mb-4">

@@ -8,9 +8,11 @@ import * as Location from "expo-location"
 import { Ionicons } from "@expo/vector-icons"
 import { router } from "expo-router"
 import BottomSheetComponent from "../../components/BottomSheetComponent"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 
-const BASE_URL = "http://192.168.42.161:8080"
-const GOOGLE_PLACES_API_KEY = "AIzaSyAqmJNttn7mi2WP30NgfpA60OjrfVGKlSE"
+import Constants from "expo-constants"
+
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL
 
 export default function Map() {
   // State for location and map
@@ -27,17 +29,26 @@ export default function Map() {
   const [searchingDrivers, setSearchingDrivers] = useState(false)
   const [driversSearched, setDriversSearched] = useState(false)
 
-  // State for location search
-  const [searchQuery, setSearchQuery] = useState("")
-  const [searchResults, setSearchResults] = useState([])
-  const [searchingPlaces, setSearchingPlaces] = useState(false)
-  const [selectedPlace, setSelectedPlace] = useState(null)
+  // State for location search - Updated for text-based search
+  const [destinationQuery, setDestinationQuery] = useState("")
+  const [searchingLocation, setSearchingLocation] = useState(false)
 
   // Get user profile info
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         console.log("Fetching user profile...")
+
+        // Try to get user data from AsyncStorage first
+        const userData = await AsyncStorage.getItem("userData")
+        if (userData) {
+          const parsedUser = JSON.parse(userData)
+          console.log("User profile from storage:", parsedUser.username)
+          setUser(parsedUser)
+          return
+        }
+
+        // If not in storage, fetch from API
         const response = await fetch(`${BASE_URL}/api/auth/profile`, {
           method: "GET",
           headers: {
@@ -51,6 +62,8 @@ export default function Map() {
         if (response.ok && data.success) {
           console.log("User profile fetched successfully:", data.user.username)
           setUser(data.user)
+          // Store in AsyncStorage for future use
+          await AsyncStorage.setItem("userData", JSON.stringify(data.user))
         } else {
           console.error("Failed to fetch user profile:", data.message)
           Alert.alert("Session Expired", "Please login again")
@@ -65,7 +78,7 @@ export default function Map() {
     fetchUserProfile()
   }, [])
 
-  // Get user's location - NO AUTOMATIC DRIVER FETCHING
+  // Get user's location
   useEffect(() => {
     ;(async () => {
       try {
@@ -83,11 +96,6 @@ export default function Map() {
 
         console.log("Current location:", currentLocation.coords.latitude, currentLocation.coords.longitude)
         setLocation(currentLocation)
-
-        // Update location in backend
-        await updateLocationInBackend(currentLocation.coords.latitude, currentLocation.coords.longitude)
-
-        // DO NOT automatically fetch drivers - user must search explicitly
       } catch (error) {
         console.error("Error getting location:", error)
         setErrorMsg("Could not get your location")
@@ -113,7 +121,6 @@ export default function Map() {
         },
         (newLocation) => {
           setLocation(newLocation)
-          updateLocationInBackend(newLocation.coords.latitude, newLocation.coords.longitude)
         },
       )
     }
@@ -126,122 +133,6 @@ export default function Map() {
       }
     }
   }, [])
-
-  // Function to update location in backend
-  const updateLocationInBackend = async (latitude, longitude) => {
-    try {
-      const response = await fetch(`${BASE_URL}/api/auth/update-location`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          latitude,
-          longitude,
-        }),
-        credentials: "include",
-      })
-
-      if (!response.ok) {
-        console.warn("Failed to update location in backend:", await response.text())
-      }
-    } catch (error) {
-      console.error("Failed to update location in backend:", error)
-    }
-  }
-
-  // Function to search for places using Google Places API
-  const searchPlaces = async (query) => {
-    if (!query || query.length < 3) return
-
-    setSearchingPlaces(true)
-
-    try {
-      console.log("Searching places for:", query)
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-          query,
-        )}&key=${GOOGLE_PLACES_API_KEY}&sessiontoken=${generateSessionToken()}`,
-      )
-
-      const data = await response.json()
-
-      if (data.status === "OK") {
-        console.log(`Found ${data.predictions.length} place predictions`)
-        setSearchResults(data.predictions)
-      } else {
-        console.error("Places API error:", data.status)
-        setSearchResults([])
-      }
-    } catch (error) {
-      console.error("Error searching places:", error)
-      setSearchResults([])
-    } finally {
-      setSearchingPlaces(false)
-    }
-  }
-
-  // Generate a session token for Places API
-  const generateSessionToken = () => {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
-  }
-
-  // Get place details from place_id
-  const getPlaceDetails = async (placeId) => {
-    try {
-      console.log("Getting place details for:", placeId)
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry&key=${GOOGLE_PLACES_API_KEY}`,
-      )
-
-      const data = await response.json()
-
-      if (data.status === "OK") {
-        console.log("Place details retrieved successfully")
-        return {
-          latitude: data.result.geometry.location.lat,
-          longitude: data.result.geometry.location.lng,
-        }
-      } else {
-        console.error("Place details API error:", data.status)
-        return null
-      }
-    } catch (error) {
-      console.error("Error getting place details:", error)
-      return null
-    }
-  }
-
-  // Handle place selection
-  const handlePlaceSelect = async (place) => {
-    console.log("Place selected:", place.description)
-    setSearchQuery(place.description)
-    setSearchResults([])
-
-    try {
-      const placeDetails = await getPlaceDetails(place.place_id)
-
-      if (placeDetails) {
-        console.log("Place coordinates:", placeDetails.latitude, placeDetails.longitude)
-        setSelectedPlace(placeDetails)
-
-        mapRef.current?.animateToRegion(
-          {
-            latitude: placeDetails.latitude,
-            longitude: placeDetails.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          },
-          1000,
-        )
-      } else {
-        Alert.alert("Error", "Could not get location details. Please try another location.")
-      }
-    } catch (error) {
-      console.error("Error handling place selection:", error)
-      Alert.alert("Error", "Failed to get location details. Please try again.")
-    }
-  }
 
   // Helper function to calculate distance between two coordinates
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -256,10 +147,15 @@ export default function Map() {
     return distance
   }
 
-  // Function to search for drivers - ONLY CALLED EXPLICITLY BY USER
-  const searchForDrivers = async () => {
-    if (!location && !selectedPlace) {
-      Alert.alert("Error", "Your location is not available")
+  // Function to search for drivers by location - Updated for text-based search
+  const searchForDriversByLocation = async () => {
+    if (!destinationQuery.trim()) {
+      Alert.alert("Error", "Please enter a destination location")
+      return
+    }
+
+    if (!location) {
+      Alert.alert("Error", "Your current location is not available")
       return
     }
 
@@ -267,19 +163,20 @@ export default function Map() {
     setDriversSearched(true)
     setNearbyDrivers([]) // Clear previous results
 
-    const searchLocation = selectedPlace || {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    }
-
     try {
-      console.log("User explicitly searching for drivers near:", searchLocation.latitude, searchLocation.longitude)
+      console.log("Searching for drivers in location:", destinationQuery)
 
-      const response = await fetch(`${BASE_URL}/api/rides/all-available-drivers`, {
-        method: "GET",
+      // Search for drivers by location text
+      const response = await fetch(`${BASE_URL}/api/rides/nearby-drivers`, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          location: destinationQuery.trim(),
+          userLatitude: location.coords.latitude,
+          userLongitude: location.coords.longitude,
+        }),
         credentials: "include",
       })
 
@@ -287,18 +184,24 @@ export default function Map() {
       console.log("Drivers search response:", data)
 
       if (response.ok && data.success) {
-        console.log(`Found ${data.drivers?.length || 0} available drivers`)
+        console.log(`Found ${data.drivers?.length || 0} drivers in ${destinationQuery}`)
 
         if (data.drivers && data.drivers.length > 0) {
-          const processedDrivers = data.drivers.map((driver) => {
-            // Place drivers randomly around the search location
+          const processedDrivers = data.drivers.map((driver, index) => {
+            // Generate random coordinates around the user's location for demo
+            // In a real app, you'd get actual driver coordinates from GPS
             const latOffset = (Math.random() - 0.5) * 0.02 // Random offset within ~1km
             const lngOffset = (Math.random() - 0.5) * 0.02
-            const driverLat = searchLocation.latitude + latOffset
-            const driverLng = searchLocation.longitude + lngOffset
+            const driverLat = location.coords.latitude + latOffset
+            const driverLng = location.coords.longitude + lngOffset
 
             // Calculate distance and fare
-            const distance = calculateDistance(searchLocation.latitude, searchLocation.longitude, driverLat, driverLng)
+            const distance = calculateDistance(
+              location.coords.latitude,
+              location.coords.longitude,
+              driverLat,
+              driverLng,
+            )
             const baseFare = 5.0
             const ratePerKm = 2.5
             const calculatedFare = baseFare + distance * ratePerKm
@@ -309,27 +212,135 @@ export default function Map() {
               longitude: driverLng,
               fare: calculatedFare.toFixed(2),
               distance: distance.toFixed(1),
+              destination: destinationQuery, // Store the searched destination
             }
           })
 
           setNearbyDrivers(processedDrivers)
 
           // Fit map to show all drivers
-          const allCoordinates = [searchLocation, ...processedDrivers]
+          const allCoordinates = [
+            { latitude: location.coords.latitude, longitude: location.coords.longitude },
+            ...processedDrivers,
+          ]
           fitAllMarkers(allCoordinates)
+
+          Alert.alert(
+            "Drivers Found",
+            `Found ${processedDrivers.length} available drivers in ${destinationQuery}. Tap on a driver marker to view details.`,
+          )
         } else {
-          // Show "drivers are busy" message
-          Alert.alert("Drivers Busy", "All drivers are busy now. Please try again later.")
+          Alert.alert(
+            "No Drivers Available",
+            `No drivers are currently available in ${destinationQuery}. Please try a different location or try again later.`,
+          )
           setNearbyDrivers([])
         }
       } else {
         console.error("Failed to fetch drivers:", data.message)
-        Alert.alert("Drivers Busy", "All drivers are busy now. Please try again later.")
+        Alert.alert(
+          "Search Failed",
+          data.message || `No drivers found in ${destinationQuery}. Please try a different location.`,
+        )
         setNearbyDrivers([])
       }
     } catch (error) {
       console.error("Error searching for drivers:", error)
-      Alert.alert("Drivers Busy", "All drivers are busy now. Please try again later.")
+      Alert.alert(
+        "Connection Error",
+        "Unable to search for drivers. Please check your internet connection and try again.",
+      )
+      setNearbyDrivers([])
+    } finally {
+      setSearchingDrivers(false)
+    }
+  }
+
+  // Function to search for all available drivers (fallback)
+  const searchForAllDrivers = async () => {
+    if (!location) {
+      Alert.alert("Error", "Your current location is not available")
+      return
+    }
+
+    setSearchingDrivers(true)
+    setDriversSearched(true)
+    setNearbyDrivers([]) // Clear previous results
+
+    try {
+      console.log("Searching for all available drivers...")
+
+      const response = await fetch(`${BASE_URL}/api/rides/all-available-drivers`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      })
+
+      const data = await response.json()
+      console.log("All drivers search response:", data)
+
+      if (response.ok && data.success) {
+        console.log(`Found ${data.drivers?.length || 0} available drivers`)
+
+        if (data.drivers && data.drivers.length > 0) {
+          const processedDrivers = data.drivers.map((driver) => {
+            // Generate random coordinates around the user's location for demo
+            const latOffset = (Math.random() - 0.5) * 0.02 // Random offset within ~1km
+            const lngOffset = (Math.random() - 0.5) * 0.02
+            const driverLat = location.coords.latitude + latOffset
+            const driverLng = location.coords.longitude + lngOffset
+
+            // Calculate distance and fare
+            const distance = calculateDistance(
+              location.coords.latitude,
+              location.coords.longitude,
+              driverLat,
+              driverLng,
+            )
+            const baseFare = 5.0
+            const ratePerKm = 2.5
+            const calculatedFare = baseFare + distance * ratePerKm
+
+            return {
+              ...driver,
+              latitude: driverLat,
+              longitude: driverLng,
+              fare: calculatedFare.toFixed(2),
+              distance: distance.toFixed(1),
+              destination: "Current Location", // Default destination
+            }
+          })
+
+          setNearbyDrivers(processedDrivers)
+
+          // Fit map to show all drivers
+          const allCoordinates = [
+            { latitude: location.coords.latitude, longitude: location.coords.longitude },
+            ...processedDrivers,
+          ]
+          fitAllMarkers(allCoordinates)
+
+          Alert.alert(
+            "Drivers Found",
+            `Found ${processedDrivers.length} available drivers near you. Tap on a driver marker to view details.`,
+          )
+        } else {
+          Alert.alert("No Drivers Available", "All drivers are busy now. Please try again later.")
+          setNearbyDrivers([])
+        }
+      } else {
+        console.error("Failed to fetch drivers:", data.message)
+        Alert.alert("Search Failed", "Unable to find drivers. Please try again later.")
+        setNearbyDrivers([])
+      }
+    } catch (error) {
+      console.error("Error searching for drivers:", error)
+      Alert.alert(
+        "Connection Error",
+        "Unable to search for drivers. Please check your internet connection and try again.",
+      )
       setNearbyDrivers([])
     } finally {
       setSearchingDrivers(false)
@@ -371,23 +382,51 @@ export default function Map() {
     }
   }
 
-  // Function to select a driver
+  // UPDATED: Function to select a driver and navigate to driver details
   const selectDriver = (driver) => {
-    console.log("Driver selected:", driver.username)
+    console.log("Driver selected:", driver.username, "ID:", driver.id)
 
-    const currentLocation = selectedPlace || {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    }
+    try {
+      const pickupLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      }
 
-    router.push({
-      pathname: "/driver-details",
-      params: {
+      // Prepare navigation parameters
+      const navigationParams = {
         driverData: JSON.stringify(driver),
-        pickupLat: currentLocation?.latitude,
-        pickupLng: currentLocation?.longitude,
-      },
-    })
+        pickupLat: pickupLocation.latitude.toString(),
+        pickupLng: pickupLocation.longitude.toString(),
+        destination: driver.destination || destinationQuery || "Current Location",
+      }
+
+      console.log("Navigating to driver details with params:", navigationParams)
+
+      // Navigate to driver details screen
+      router.push({
+        pathname: "/driver-details-screen",
+        params: navigationParams,
+      })
+    } catch (error) {
+      console.error("Error navigating to driver details:", error)
+      Alert.alert("Navigation Error", "Unable to open driver details. Please try again.")
+    }
+  }
+
+  // UPDATED: Function to handle marker press (alternative to callout)
+  const handleDriverMarkerPress = (driver) => {
+    console.log("Driver marker pressed:", driver.username)
+    selectDriver(driver)
+  }
+
+  // FIXED: Function to navigate to first available driver details
+  const navigateToFirstDriverDetails = () => {
+    if (nearbyDrivers.length > 0) {
+      // Navigate to the first driver in the list
+      selectDriver(nearbyDrivers[0])
+    } else {
+      Alert.alert("No Drivers", "No drivers available to view details.")
+    }
   }
 
   // Handle logout
@@ -400,6 +439,9 @@ export default function Map() {
         },
         credentials: "include",
       })
+
+      // Clear AsyncStorage
+      await AsyncStorage.clear()
       router.replace("/login")
     } catch (error) {
       console.error("Logout error:", error)
@@ -418,6 +460,15 @@ export default function Map() {
 
   const navigateToProfile = () => {
     router.push("/accounts")
+  }
+
+  // Handle search input submission
+  const handleSearchSubmit = () => {
+    if (destinationQuery.trim()) {
+      searchForDriversByLocation()
+    } else {
+      Alert.alert("Error", "Please enter a destination location")
+    }
   }
 
   if (loading) {
@@ -471,20 +522,7 @@ export default function Map() {
               pinColor="blue"
             />
 
-            {/* Selected place marker */}
-            {selectedPlace && (
-              <Marker
-                coordinate={{
-                  latitude: selectedPlace.latitude,
-                  longitude: selectedPlace.longitude,
-                }}
-                title="Selected Location"
-                description={searchQuery}
-                pinColor="red"
-              />
-            )}
-
-            {/* Driver markers - ONLY SHOWN AFTER USER SEARCHES */}
+            {/* Driver markers - UPDATED with better navigation */}
             {nearbyDrivers.map((driver) => {
               const latitude = Number.parseFloat(driver.latitude)
               const longitude = Number.parseFloat(driver.longitude)
@@ -504,18 +542,31 @@ export default function Map() {
                   title={driver.username || "Driver"}
                   description={`${driver.vehicle_model || "Vehicle"} (${driver.vehicle_color || "N/A"})`}
                   pinColor="green"
+                  onPress={() => handleDriverMarkerPress(driver)}
                 >
                   <Callout tooltip onPress={() => selectDriver(driver)}>
-                    <View className="bg-white p-3 rounded-lg shadow-md" style={{ width: 180 }}>
-                      <Text className="font-bold">{driver.username || "Driver"}</Text>
-                      <Text className="text-gray-700">{driver.vehicle_model || "Vehicle"}</Text>
-                      <Text className="text-gray-700">
-                        {driver.vehicle_color || "N/A"} · {driver.vehicle_plate || "N/A"}
-                      </Text>
-                      <Text className="text-gray-600 text-sm mt-1">{driver.distance || "1.0"} km away</Text>
-                      <Text className="text-blue-600 font-bold mt-1">${driver.fare || "15.00"}</Text>
+                    <View className="bg-white p-3 rounded-lg shadow-md" style={{ width: 220 }}>
+                      <Text className="font-bold text-lg text-center mb-2">{driver.username || "Driver"}</Text>
+
+                      <View className="mb-2">
+                        <Text className="text-gray-700 font-medium">{driver.vehicle_model || "Vehicle"}</Text>
+                        <Text className="text-gray-600 text-sm">
+                          {driver.vehicle_color || "N/A"} • {driver.vehicle_plate || "N/A"}
+                        </Text>
+                      </View>
+
+                      <View className="mb-2">
+                        <Text className="text-gray-600 text-sm">📍 {driver.location || "Not specified"}</Text>
+                        <Text className="text-gray-600 text-sm">📏 {driver.distance || "1.0"} km away</Text>
+                      </View>
+
+                      <View className="border-t border-gray-200 pt-2 mb-3">
+                        <Text className="text-blue-600 font-bold text-center text-xl">
+                          ${driver.fare || "15.00"}</Text>
+                      </View>
+
                       <TouchableOpacity
-                        className="mt-2 bg-blue-500 py-2 px-4 rounded-lg"
+                        className="bg-blue-500 py-2 px-4 rounded-lg"
                         onPress={() => selectDriver(driver)}
                       >
                         <Text className="text-white text-center font-medium">View Details</Text>
@@ -532,6 +583,7 @@ export default function Map() {
             <View className="flex-row justify-between items-center p-4 mx-4 mt-2 bg-white rounded-lg shadow-md">
               <View>
                 <Text className="text-gray-500 font-bold text-xl">Welcome, {user ? user.username : "User"}</Text>
+                <Text className="text-gray-400 text-sm">Where would you like to go?</Text>
               </View>
               <TouchableOpacity className="p-2" onPress={handleLogout}>
                 <Ionicons name="log-out-outline" size={24} color="#3b82f6" />
@@ -539,69 +591,54 @@ export default function Map() {
             </View>
           </SafeAreaView>
 
-          {/* Search Bar */}
+          {/* Destination Search Bar - Updated for text-based search */}
           <View style={{ position: "absolute", top: 100, left: 0, right: 0 }}>
             <View className="px-4 py-2 mx-4 mt-2">
               <View className="flex-row items-center bg-white rounded-full px-4 py-2 shadow-md">
-                <Ionicons name="search" size={20} color="#3b82f6" />
+                <Ionicons name="location" size={20} color="#3b82f6" />
                 <TextInput
                   className="flex-1 ml-2 text-gray-800"
-                  placeholder="Search for destinations..."
-                  value={searchQuery}
-                  onChangeText={(text) => {
-                    setSearchQuery(text)
-                    if (text.length > 2) {
-                      searchPlaces(text)
-                    } else {
-                      setSearchResults([])
-                    }
-                  }}
+                  placeholder="Enter destination (e.g., New York, NY)"
+                  value={destinationQuery}
+                  onChangeText={setDestinationQuery}
                   returnKeyType="search"
+                  onSubmitEditing={handleSearchSubmit}
                 />
-                {searchingPlaces ? (
+                {searchingDrivers ? (
                   <ActivityIndicator size="small" color="#3b82f6" />
                 ) : (
-                  <TouchableOpacity onPress={searchForDrivers}>
-                    <Ionicons name="arrow-forward-circle" size={24} color="#3b82f6" />
+                  <TouchableOpacity onPress={handleSearchSubmit}>
+                    <Ionicons name="search" size={24} color="#3b82f6" />
                   </TouchableOpacity>
                 )}
               </View>
 
-              {/* Search results dropdown */}
-              {searchResults.length > 0 && (
-                <View className="bg-white rounded-lg mt-1 shadow-md">
-                  {searchResults.map((result, index) => (
-                    <TouchableOpacity
-                      key={result.place_id}
-                      className={`p-3 ${index !== searchResults.length - 1 ? "border-b border-gray-200" : ""}`}
-                      onPress={() => handlePlaceSelect(result)}
-                    >
-                      <Text className="font-medium">
-                        {result.structured_formatting?.main_text || result.description}
-                      </Text>
-                      <Text className="text-gray-500 text-sm">{result.structured_formatting?.secondary_text}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+              {/* Search Instructions */}
+              <View className="bg-blue-50 rounded-lg mt-2 p-3">
+                <Text className="text-blue-700 text-sm text-center">
+                  💡 Enter a city or location to find available drivers in that area
+                </Text>
+              </View>
             </View>
           </View>
 
           {/* Floating Action Button - My Location */}
           <TouchableOpacity
             onPress={centerOnUserLocation}
-            style={{ position: "absolute", right: 16, top: 200 }}
+            style={{ position: "absolute", right: 16, top: 220 }}
             className="bg-white p-3 rounded-full shadow-md"
           >
             <Ionicons name="locate" size={24} color="#3b82f6" />
           </TouchableOpacity>
 
-          {/* Bottom Sheet */}
+          {/* Bottom Sheet - Updated for location-based search */}
           <View style={{ position: "absolute", bottom: 100, left: 0, right: 0 }}>
             <BottomSheetComponent
-              onSearchDrivers={searchForDrivers}
+              onSearchDrivers={searchForDriversByLocation}
               searchingDrivers={searchingDrivers}
-              onFindAllDrivers={searchForDrivers}
+              onFindAllDrivers={searchForAllDrivers}
+              destinationQuery={destinationQuery}
+              driversFound={nearbyDrivers.length}
             />
           </View>
 
@@ -623,15 +660,71 @@ export default function Map() {
             </View>
           </SafeAreaView>
 
-          {/* No Drivers Message */}
-          {driversSearched && nearbyDrivers.length === 0 && !searchingDrivers && (
-            <View style={{ position: "absolute", top: "50%", left: 0, right: 0 }}>
+          {/* Search Results Message - UPDATED with better driver selection */}
+          {driversSearched && !searchingDrivers && (
+            <View style={{ position: "absolute", top: "45%", left: 0, right: 0 }}>
               <View className="bg-white mx-4 p-4 rounded-lg shadow-md">
-                <Text className="text-center text-gray-600 text-lg">🚗 All drivers are busy now</Text>
-                <Text className="text-center text-gray-500 mt-2">Please try again later</Text>
-                <TouchableOpacity className="bg-blue-500 py-2 px-4 rounded-lg mt-3" onPress={searchForDrivers}>
-                  <Text className="text-white text-center font-medium">Try Again</Text>
-                </TouchableOpacity>
+                {nearbyDrivers.length > 0 ? (
+                  <View>
+                    <Text className="text-center text-green-600 text-lg font-bold">
+                      🚗 {nearbyDrivers.length} Driver{nearbyDrivers.length > 1 ? "s" : ""} Found!
+                    </Text>
+                    <Text className="text-center text-gray-600 mt-2">
+                      {destinationQuery ? `Available in ${destinationQuery}` : "Available near you"}
+                    </Text>
+                    <Text className="text-center text-gray-500 text-sm mt-1">
+                      Tap on a driver marker to view details and book
+                    </Text>
+
+                    {/* Show list of drivers for quick selection */}
+                    <View className="mt-3 space-y-2">
+                      {nearbyDrivers.slice(0, 3).map((driver, index) => (
+                        <TouchableOpacity
+                          key={driver.id || index}
+                          className="bg-blue-50 p-3 rounded-lg flex-row justify-between items-center"
+                          onPress={() => selectDriver(driver)}
+                        >
+                          <View className="flex-1">
+                            <Text className="font-medium text-gray-800">{driver.username}</Text>
+                            <Text className="text-sm text-gray-600">
+                              {driver.vehicle_model} • {driver.distance} km
+                            </Text>
+                          </View>
+                          <Text className="text-blue-600 font-bold">₵{driver.fare}</Text>
+                        </TouchableOpacity>
+                      ))}
+
+                      {nearbyDrivers.length > 3 && (
+                        <Text className="text-center text-gray-500 text-sm mt-2">
+                          +{nearbyDrivers.length - 3} more drivers available on map
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ) : (
+                  <View>
+                    <Text className="text-center text-orange-600 text-lg font-bold">🚗 No Drivers Available</Text>
+                    <Text className="text-center text-gray-600 mt-2">
+                      {destinationQuery ? `No drivers found in ${destinationQuery}` : "No drivers available nearby"}
+                    </Text>
+                    <TouchableOpacity
+                      className="bg-blue-500 py-2 px-4 rounded-lg mt-3"
+                      onPress={destinationQuery ? searchForDriversByLocation : searchForAllDrivers}
+                    >
+                      <Text className="text-white text-center font-medium">Try Again</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="bg-gray-500 py-2 px-4 rounded-lg mt-2"
+                      onPress={() => {
+                        setDestinationQuery("")
+                        setDriversSearched(false)
+                        setNearbyDrivers([])
+                      }}
+                    >
+                      <Text className="text-white text-center font-medium">Clear Search</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             </View>
           )}

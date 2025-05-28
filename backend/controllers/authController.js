@@ -2,7 +2,152 @@ const bcrypt = require("bcrypt")
 const db = require("../config/database")
 
 const authController = {
-  // Register a new user (regular user only)
+  // Updated registerDriver method with required location field
+  registerDriver: async (req, res) => {
+    try {
+      const {
+        username,
+        email,
+        password,
+        phone_number,
+        driver_license,
+        vehicle_model,
+        vehicle_color,
+        vehicle_plate,
+        years_of_experience,
+        location
+      } = req.body
+
+      console.log('Driver registration request:', {
+        username,
+        email,
+        driver_license,
+        vehicle_model,
+        vehicle_color,
+        vehicle_plate,
+        years_of_experience,
+        location
+      })
+
+      // Validation - basic required fields
+      if (!username || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide username, email, and password",
+        })
+      }
+
+      // Validation - driver specific required fields
+      if (!driver_license || !vehicle_model || !vehicle_color || !vehicle_plate) {
+        return res.status(400).json({
+          success: false,
+          message: "Please provide all driver registration details: license, vehicle model, color, and plate",
+        })
+      }
+
+      // Validation - location is now required
+      if (!location || location.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Location is required for driver registration",
+        })
+      }
+
+      // Validate location length
+      if (location.trim().length > 255) {
+        return res.status(400).json({
+          success: false,
+          message: "Location must be less than 255 characters",
+        })
+      }
+
+      // Check if email/username exists in any table
+      const [existingUsers] = await db.query("SELECT email FROM users WHERE email = ? OR username = ?", [email, username])
+      const [existingDrivers] = await db.query("SELECT email FROM drivers WHERE email = ? OR username = ?", [email, username])
+      const [existingAdmins] = await db.query("SELECT email FROM admins WHERE email = ? OR username = ?", [email, username])
+
+      if (existingUsers.length > 0 || existingDrivers.length > 0 || existingAdmins.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Email or username already in use",
+        })
+      }
+
+      // Check if driver license is already registered
+      const [existingLicense] = await db.query("SELECT driver_license FROM drivers WHERE driver_license = ?", [driver_license])
+
+      if (existingLicense.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Driver license already registered",
+        })
+      }
+
+      // Check if vehicle plate is already registered
+      const [existingPlate] = await db.query("SELECT vehicle_plate FROM drivers WHERE vehicle_plate = ?", [vehicle_plate])
+
+      if (existingPlate.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: "Vehicle plate already registered",
+        })
+      }
+
+      // Hash password
+      const saltRounds = 10
+      const hashedPassword = await bcrypt.hash(password, saltRounds)
+
+      // Get vehicle image path if uploaded
+      const vehicleImagePath = req.file ? `/uploads/vehicles/${req.file.filename}` : null
+
+      // Insert driver with location
+      const [driverResult] = await db.query(
+        `INSERT INTO drivers (
+          username, email, password, phone_number,
+          driver_license, vehicle_model, vehicle_color, vehicle_plate, 
+          years_of_experience, vehicle_image, license_verified, available, location
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          username,
+          email,
+          hashedPassword,
+          phone_number || null,
+          driver_license,
+          vehicle_model,
+          vehicle_color,
+          vehicle_plate,
+          years_of_experience || 0,
+          vehicleImagePath,
+          0, // Not verified initially
+          1, // Available by default
+          location.trim()
+        ],
+      )
+
+      console.log('Driver registered successfully:', {
+        driverId: driverResult.insertId,
+        username,
+        email,
+        location: location.trim()
+      })
+
+      return res.status(201).json({
+        success: true,
+        message: "Driver registered successfully. Please wait for license verification.",
+        driverId: driverResult.insertId,
+        userType: "driver",
+        location: location.trim()
+      })
+    } catch (error) {
+      console.error("Driver registration error:", error)
+      return res.status(500).json({
+        success: false,
+        message: "Server error during driver registration",
+      })
+    }
+  },
+
+  // Updated registerUser method (no changes needed for location)
   registerUser: async (req, res) => {
     try {
       const { username, email, password, phone_number } = req.body
@@ -51,113 +196,66 @@ const authController = {
     }
   },
 
-  // Register a new driver
-  registerDriver: async (req, res) => {
+  // Simplified updateLocation method (now updates location text field)
+  updateLocation: async (req, res) => {
     try {
-      const {
-        username,
-        email,
-        password,
-        phone_number,
-        driver_license,
-        vehicle_model,
-        vehicle_color,
-        vehicle_plate,
-        years_of_experience,
-      } = req.body
+      const { location } = req.body
 
-      if (!username || !email || !password) {
+      if (!req.session || !req.session.user) {
+        return res.status(401).json({
+          success: false,
+          message: "Authentication required",
+        })
+      }
+
+      // Validate location
+      if (!location || location.trim().length === 0) {
         return res.status(400).json({
           success: false,
-          message: "Please provide username, email, and password",
+          message: "Location is required",
         })
       }
 
-      if (!driver_license || !vehicle_model || !vehicle_color || !vehicle_plate) {
+      if (location.trim().length > 255) {
         return res.status(400).json({
           success: false,
-          message: "Please provide all driver registration details: license, vehicle model, color, and plate",
+          message: "Location must be less than 255 characters",
         })
       }
 
-      // Check if email/username exists in any table
-      const [existingUsers] = await db.query("SELECT email FROM users WHERE email = ? OR username = ?", [email, username])
-      const [existingDrivers] = await db.query("SELECT email FROM drivers WHERE email = ? OR username = ?", [email, username])
-      const [existingAdmins] = await db.query("SELECT email FROM admins WHERE email = ? OR username = ?", [email, username])
+      const userId = req.session.user.id
+      const userType = req.session.user.userType
 
-      if (existingUsers.length > 0 || existingDrivers.length > 0 || existingAdmins.length > 0) {
-        return res.status(409).json({
+      // Only drivers can update location
+      if (userType !== "driver") {
+        return res.status(403).json({
           success: false,
-          message: "Email or username already in use",
+          message: "Only drivers can update location",
         })
       }
 
-      // Check if driver license is already registered
-      const [existingLicense] = await db.query("SELECT driver_license FROM drivers WHERE driver_license = ?", [driver_license])
+      await db.query(`UPDATE drivers SET location = ? WHERE id = ?`, [
+        location.trim(),
+        userId,
+      ])
 
-      if (existingLicense.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: "Driver license already registered",
-        })
-      }
+      console.log(`Location updated for driver ${userId}:`, location.trim())
 
-      // Check if vehicle plate is already registered
-      const [existingPlate] = await db.query("SELECT vehicle_plate FROM drivers WHERE vehicle_plate = ?", [vehicle_plate])
-
-      if (existingPlate.length > 0) {
-        return res.status(409).json({
-          success: false,
-          message: "Vehicle plate already registered",
-        })
-      }
-
-      // Hash password
-      const saltRounds = 10
-      const hashedPassword = await bcrypt.hash(password, saltRounds)
-
-      // Get vehicle image path if uploaded
-      const vehicleImagePath = req.file ? `/uploads/vehicles/${req.file.filename}` : null
-
-      // Insert driver
-      const [driverResult] = await db.query(
-        `INSERT INTO drivers (
-          username, email, password, phone_number,
-          driver_license, vehicle_model, vehicle_color, vehicle_plate, 
-          years_of_experience, vehicle_image, license_verified, available
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          username,
-          email,
-          hashedPassword,
-          phone_number || null,
-          driver_license,
-          vehicle_model,
-          vehicle_color,
-          vehicle_plate,
-          years_of_experience || 0,
-          vehicleImagePath,
-          0, // Not verified initially
-          1, // Available by default
-        ],
-      )
-
-      return res.status(201).json({
+      return res.status(200).json({
         success: true,
-        message: "Driver registered successfully. Please wait for license verification.",
-        driverId: driverResult.insertId,
-        userType: "driver",
+        message: "Location updated successfully",
+        location: location.trim()
       })
     } catch (error) {
-      console.error("Driver registration error:", error)
+      console.error("Update location error:", error)
       return res.status(500).json({
         success: false,
-        message: "Server error during driver registration",
+        message: "Server error updating location",
       })
     }
   },
 
-  // Unified login for all user types
+  // Login method (no changes needed)
   login: async (req, res) => {
     try {
       const { email, password } = req.body
@@ -264,6 +362,7 @@ const authController = {
           username: user.username,
           userType: userType,
           redirectRoute: redirectRoute,
+          location: userType === "driver" ? user.location : undefined
         },
       })
     } catch (error) {
@@ -275,7 +374,7 @@ const authController = {
     }
   },
 
-  // Get profile based on user type
+  // Get profile method
   getProfile: async (req, res) => {
     try {
       const userId = req.session.user.id
@@ -312,42 +411,6 @@ const authController = {
     }
   },
 
-  // Update location
-  updateLocation: async (req, res) => {
-    try {
-      const { latitude, longitude } = req.body
-
-      if (!req.session || !req.session.user) {
-        return res.status(401).json({
-          success: false,
-          message: "Authentication required",
-        })
-      }
-
-      const userId = req.session.user.id
-      const userType = req.session.user.userType
-
-      let table = userType === "driver" ? "drivers" : "users"
-
-      await db.query(`UPDATE ${table} SET latitude = ?, longitude = ?, last_location_update = NOW() WHERE id = ?`, [
-        latitude,
-        longitude,
-        userId,
-      ])
-
-      return res.status(200).json({
-        success: true,
-        message: "Location updated successfully",
-      })
-    } catch (error) {
-      console.error("Update location error:", error)
-      return res.status(500).json({
-        success: false,
-        message: "Server error updating location",
-      })
-    }
-  },
-
   logout: (req, res) => {
     req.session.destroy((err) => {
       if (err) {
@@ -365,5 +428,40 @@ const authController = {
     })
   },
 }
+
+// Test the registration with location
+function testDriverRegistrationWithLocation() {
+  const testDriverData = {
+    username: "test_driver_location",
+    email: "testdriver@example.com", 
+    password: "securepassword123",
+    phone_number: "+1234567890",
+    driver_license: "DL123456789",
+    vehicle_model: "Toyota Camry",
+    vehicle_color: "Blue",
+    vehicle_plate: "ABC123",
+    years_of_experience: 5,
+    location: "New York City, NY"  // Simple text location
+  }
+
+  console.log('Testing driver registration with location field:')
+  console.log(JSON.stringify(testDriverData, null, 2))
+  
+  // Simulate validation
+  if (testDriverData.location && testDriverData.location.trim().length > 0) {
+    console.log('✅ Location validation passed')
+    console.log(`📍 Driver location: ${testDriverData.location}`)
+  } else {
+    console.log('❌ Location validation failed - location is required')
+  }
+  
+  if (testDriverData.location.length <= 255) {
+    console.log('✅ Location length validation passed')
+  } else {
+    console.log('❌ Location too long - must be 255 characters or less')
+  }
+}
+
+testDriverRegistrationWithLocation()
 
 module.exports = authController

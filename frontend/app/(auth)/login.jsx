@@ -10,16 +10,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
   Alert,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { router } from "expo-router"
 import AsyncStorage from "@react-native-async-storage/async-storage"
+import Constants from "expo-constants"
+import { __DEV__ } from "react-native"
 
-import image4 from "@/assets/images/image4.png"
+// You'll need to add your image assets
+// import image4 from "@/assets/images/image4.png"
 
-const BASE_URL = "http://192.168.42.161:8080"
+const BASE_URL = Constants.expoConfig?.extra?.BASE_URL;
 
 const LoginScreen = () => {
   const [email, setEmail] = useState("")
@@ -44,6 +46,8 @@ const LoginScreen = () => {
 
     try {
       setLoading(true)
+      console.log("Attempting login with:", { email: email.toLowerCase().trim() })
+
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
@@ -57,22 +61,35 @@ const LoginScreen = () => {
       })
 
       const data = await response.json()
+      console.log("Login response:", data)
 
       if (response.ok && data.success) {
-        // Store user data with userType instead of role
+        // Store user data - updated to match backend response structure
         const userData = {
           id: data.user.id,
           email: data.user.email,
           username: data.user.username,
-          userType: data.user.userType, // Updated to use userType from backend
+          userType: data.user.userType,
+          // Store additional driver info if user is a driver
+          ...(data.user.userType === "driver" && {
+            license_verified: data.user.license_verified,
+            available: data.user.available,
+            location: data.user.location,
+            vehicle_model: data.user.vehicle_model,
+            vehicle_color: data.user.vehicle_color,
+            vehicle_plate: data.user.vehicle_plate,
+          }),
         }
 
         await AsyncStorage.setItem("userData", JSON.stringify(userData))
+        console.log("User data stored:", userData)
 
-        // Route based on userType
+        // Route based on userType with proper dashboard routing
         switch (data.user.userType) {
           case "admin":
-            router.replace("/admin")
+            Alert.alert("Login Successful", `Welcome back, ${data.user.username}!`, [
+              { text: "OK", onPress: () => router.replace("/admin") },
+            ])
             break
           case "driver":
             // Check driver verification status
@@ -89,17 +106,20 @@ const LoginScreen = () => {
                 [{ text: "OK", onPress: () => router.replace("/driver-dashboard") }],
               )
             } else {
-              router.replace("/driver-dashboard")
+              Alert.alert("Login Successful", `Welcome back, ${data.user.username}!`, [
+                { text: "OK", onPress: () => router.replace("/driver-dashboard") },
+              ])
             }
             break
           case "user":
           default:
-            router.replace("/map")
+            Alert.alert("Login Successful", `Welcome back, ${data.user.username}!`, [
+              { text: "OK", onPress: () => router.replace("/map") },
+            ])
             break
         }
-
-        Alert.alert("Login Successful", `Welcome back, ${data.user.username}!`)
       } else {
+        console.error("Login failed:", data)
         if (response.status === 401) {
           Alert.alert("Login Failed", "Invalid email or password. Please try again.")
         } else if (response.status === 403) {
@@ -120,16 +140,21 @@ const LoginScreen = () => {
   }
 
   const handleForgotPassword = () => {
-    router.push("/forgot-password")
+    Alert.alert("Forgot Password", "This feature will be implemented soon!")
+    // router.push("/forgot-password")
   }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : null} className="flex-1">
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
         <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View className="flex-1 justify-center px-8 py-10">
             <View className="items-center mb-8">
-              <Image source={image4} className="w-48 h-32" resizeMode="contain" />
+              {/* Replace with your actual image */}
+              <View className="w-48 h-32 bg-blue-100 rounded-lg items-center justify-center mb-4">
+                <Text className="text-blue-600 text-4xl font-bold">🚗</Text>
+                <Text className="text-blue-600 font-bold">RideShare</Text>
+              </View>
               <Text className="text-2xl font-bold mt-4 text-blue-600">Welcome Back</Text>
               <Text className="text-gray-500 mt-2">Log in to your account</Text>
             </View>
@@ -137,34 +162,43 @@ const LoginScreen = () => {
             <View className="mb-4">
               <Text className="text-gray-700 mb-2 font-medium">Email</Text>
               <TextInput
-                className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                className="border border-gray-300 rounded-lg p-4 text-gray-700 bg-white"
                 value={email}
                 onChangeText={setEmail}
                 placeholder="Enter your email"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                editable={!loading}
               />
             </View>
 
             <View className="mb-2">
               <Text className="text-gray-700 mb-2 font-medium">Password</Text>
               <TextInput
-                className="border border-gray-300 rounded-lg p-4 text-gray-700"
+                className="border border-gray-300 rounded-lg p-4 text-gray-700 bg-white"
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter your password"
                 secureTextEntry
+                editable={!loading}
               />
             </View>
 
+            <TouchableOpacity className="items-end mb-4" onPress={handleForgotPassword}>
+              <Text className="text-blue-600 text-sm">Forgot Password?</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
-              className="bg-blue-600 rounded-lg py-4 mt-4 items-center mb-6"
+              className={`rounded-lg py-4 mt-4 items-center mb-6 ${loading ? "bg-blue-400" : "bg-blue-600"}`}
               onPress={handleLogin}
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#ffffff" />
+                <View className="flex-row items-center">
+                  <ActivityIndicator color="#ffffff" size="small" />
+                  <Text className="text-white font-bold text-lg ml-2">Logging in...</Text>
+                </View>
               ) : (
                 <Text className="text-white font-bold text-lg">Log In</Text>
               )}
@@ -173,6 +207,43 @@ const LoginScreen = () => {
             <TouchableOpacity className="items-center" onPress={() => router.push("/register")}>
               <Text className="text-blue-600">Don't have an account? Sign Up</Text>
             </TouchableOpacity>
+
+            {/* Development helper */}
+            {__DEV__ && (
+              <View className="mt-8 p-4 bg-gray-100 rounded-lg">
+                <Text className="text-gray-600 text-sm font-medium mb-2">Development Mode</Text>
+                <Text className="text-gray-500 text-xs">Base URL: {BASE_URL}</Text>
+                <View className="flex-row flex-wrap mt-2">
+                  <TouchableOpacity
+                    className="bg-gray-300 py-2 px-4 rounded mr-2 mb-2"
+                    onPress={() => {
+                      setEmail("admin@test.com")
+                      setPassword("password123")
+                    }}
+                  >
+                    <Text className="text-gray-700 text-sm">Admin Login</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="bg-gray-300 py-2 px-4 rounded mr-2 mb-2"
+                    onPress={() => {
+                      setEmail("driver@test.com")
+                      setPassword("password123")
+                    }}
+                  >
+                    <Text className="text-gray-700 text-sm">Driver Login</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    className="bg-gray-300 py-2 px-4 rounded mb-2"
+                    onPress={() => {
+                      setEmail("user@test.com")
+                      setPassword("password123")
+                    }}
+                  >
+                    <Text className="text-gray-700 text-sm">User Login</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

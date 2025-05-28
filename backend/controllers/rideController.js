@@ -1,29 +1,28 @@
 const db = require("../config/database")
 
 const rideController = {
-  // Get nearby drivers
+  // Updated to use text-based location instead of coordinates
   getNearbyDrivers: async (req, res) => {
     try {
-      const { latitude, longitude, radius = 10 } = req.body
+      const { location } = req.body
 
-      if (!latitude || !longitude) {
+      if (!location || location.trim().length === 0) {
         return res.status(400).json({
           success: false,
-          message: "Latitude and longitude are required",
+          message: "Location is required",
         })
       }
 
-      console.log(`Searching for drivers within ${radius}km of coordinates: ${latitude}, ${longitude}`)
+      console.log(`Searching for drivers in location: ${location}`)
 
-      // Query to find nearby available drivers using Haversine formula
+      // Query to find available drivers in the same or similar location
       const query = `
         SELECT 
           d.id,
           d.username,
           d.email,
           d.phone_number,
-          d.latitude,
-          d.longitude,
+          d.location,
           d.vehicle_model,
           d.vehicle_color,
           d.vehicle_plate,
@@ -31,33 +30,24 @@ const rideController = {
           d.years_of_experience,
           d.license_verified,
           d.available,
-          d.vehicle_image,
-          (
-            6371 * acos(
-              cos(radians(?)) * cos(radians(d.latitude)) * 
-              cos(radians(d.longitude) - radians(?)) + 
-              sin(radians(?)) * sin(radians(d.latitude))
-            )
-          ) AS distance
+          d.vehicle_image
         FROM drivers d
         WHERE d.license_verified = 1 
           AND d.available = 1
           AND d.is_active = 1
-          AND d.latitude IS NOT NULL 
-          AND d.longitude IS NOT NULL
-        HAVING distance <= ?
-        ORDER BY distance ASC
+          AND d.location LIKE ?
+        ORDER BY d.created_at DESC
         LIMIT 20
       `
 
-      const [drivers] = await db.execute(query, [latitude, longitude, latitude, radius])
+      const [drivers] = await db.execute(query, [`%${location.trim()}%`])
 
-      console.log(`Found ${drivers.length} nearby drivers`)
+      console.log(`Found ${drivers.length} drivers in location: ${location}`)
 
       res.json({
         success: true,
         drivers: drivers,
-        message: `Found ${drivers.length} drivers within ${radius}km`,
+        message: `Found ${drivers.length} drivers in ${location}`,
       })
     } catch (error) {
       console.error("Error finding nearby drivers:", error)
@@ -69,7 +59,7 @@ const rideController = {
     }
   },
 
-  // Get all available drivers
+  // Updated to use text-based location
   getAllAvailableDrivers: async (req, res) => {
     try {
       console.log("Fetching all available drivers...")
@@ -80,8 +70,7 @@ const rideController = {
           d.username,
           d.email,
           d.phone_number,
-          d.latitude,
-          d.longitude,
+          d.location,
           d.vehicle_model,
           d.vehicle_color,
           d.vehicle_plate,
@@ -95,7 +84,7 @@ const rideController = {
         WHERE d.license_verified = 1 
           AND d.available = 1
           AND d.is_active = 1
-        ORDER BY d.created_at DESC
+        ORDER BY d.location, d.created_at DESC
         LIMIT 50
       `
 
@@ -118,7 +107,7 @@ const rideController = {
     }
   },
 
-  // Request a ride
+  // Updated to use text-based location
   requestRide: async (req, res) => {
     try {
       const { driverId, pickupLocation, dropoffLocation, fare } = req.body
@@ -141,7 +130,7 @@ const rideController = {
 
       // Check if driver exists and is available
       const [driverCheck] = await db.execute(
-        `SELECT id, username, available 
+        `SELECT id, username, available, location
          FROM drivers 
          WHERE id = ? AND is_active = 1`,
         [driverId],
@@ -161,19 +150,17 @@ const rideController = {
         })
       }
 
-      // Create the ride
+      // Create the ride with text-based locations
       const [result] = await db.execute(
         `INSERT INTO rides (
-          user_id, driver_id, pickup_latitude, pickup_longitude, 
-          dropoff_latitude, dropoff_longitude, fare, status, payment_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'requested', 'pending')`,
+          user_id, driver_id, pickup_location, dropoff_location, 
+          fare, status, payment_status
+        ) VALUES (?, ?, ?, ?, ?, 'requested', 'pending')`,
         [
           userId,
           driverId,
-          pickupLocation.latitude,
-          pickupLocation.longitude,
-          dropoffLocation.latitude,
-          dropoffLocation.longitude,
+          pickupLocation,
+          dropoffLocation,
           fare,
         ],
       )
@@ -200,7 +187,7 @@ const rideController = {
     }
   },
 
-  // Get ride details
+  // Updated to use text-based location
   getRideDetails: async (req, res) => {
     try {
       const { rideId } = req.params
@@ -215,7 +202,8 @@ const rideController = {
           d.username as driver_name,
           d.vehicle_model,
           d.vehicle_color,
-          d.vehicle_plate
+          d.vehicle_plate,
+          d.location as driver_location
         FROM rides r
         LEFT JOIN users u ON r.user_id = u.id
         LEFT JOIN drivers d ON r.driver_id = d.id
@@ -245,16 +233,16 @@ const rideController = {
     }
   },
 
-  // Get user's ride history
+  // Updated to use text-based location
   getRideHistory: async (req, res) => {
     try {
       const userId = req.session.user.id
-      const userRole = req.session.user.role
+      const userType = req.session.user.userType // Changed from role to userType to match auth middleware
 
-      console.log("Fetching ride history for user:", userId, "role:", userRole)
+      console.log("Fetching ride history for user:", userId, "type:", userType)
 
       let query
-      if (userRole === "driver") {
+      if (userType === "driver") {
         // User is a driver, get rides where they are the driver
         query = `
           SELECT 
@@ -274,7 +262,8 @@ const rideController = {
             d.username as driver_name,
             d.vehicle_model,
             d.vehicle_color,
-            d.vehicle_plate
+            d.vehicle_plate,
+            d.location as driver_location
           FROM rides r
           LEFT JOIN drivers d ON r.driver_id = d.id
           WHERE r.user_id = ?
@@ -299,7 +288,7 @@ const rideController = {
     }
   },
 
-  // Calculate fare for a ride
+  // Updated to use fixed fare calculation instead of distance-based
   calculateFare: async (req, res) => {
     try {
       const { pickupLocation, dropoffLocation } = req.body
@@ -311,34 +300,28 @@ const rideController = {
         })
       }
 
-      // Calculate distance using Haversine formula
-      const R = 6371 // Radius of the Earth in kilometers
-      const dLat = ((dropoffLocation.latitude - pickupLocation.latitude) * Math.PI) / 180
-      const dLon = ((dropoffLocation.longitude - pickupLocation.longitude) * Math.PI) / 180
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos((pickupLocation.latitude * Math.PI) / 180) *
-          Math.cos((dropoffLocation.latitude * Math.PI) / 180) *
-          Math.sin(dLon / 2) *
-          Math.sin(dLon / 2)
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-      const distance = R * c // Distance in kilometers
-
-      // Calculate fare
+      // Since we no longer have coordinates, we'll use a simplified fare calculation
+      // based on a fixed base fare plus a random factor to simulate distance
+      
       const baseFare = 5.0
+      
+      // Generate a random "distance" factor between 1-10 km
+      // In a real app, you might use a geocoding API to calculate actual distance
+      const estimatedDistance = Math.random() * 9 + 1
+      
       const ratePerKm = 2.5
-      const distanceFare = distance * ratePerKm
+      const distanceFare = estimatedDistance * ratePerKm
       const totalFare = baseFare + distanceFare
 
-      console.log(`Calculated fare: Distance ${distance.toFixed(2)}km, Fare $${totalFare.toFixed(2)}`)
+      console.log(`Calculated fare: Estimated distance ~${estimatedDistance.toFixed(2)}km, Fare $${totalFare.toFixed(2)}`)
 
       res.json({
         success: true,
-        distance: distance,
-        fare: totalFare,
+        estimatedDistance: estimatedDistance,
+        fare: parseFloat(totalFare.toFixed(2)),
         breakdown: {
           baseFare: baseFare,
-          distanceFare: distanceFare,
+          distanceFare: parseFloat(distanceFare.toFixed(2)),
           ratePerKm: ratePerKm,
         },
       })
